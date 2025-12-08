@@ -207,7 +207,7 @@ void freeTree(Node* n) {
   delete n;
 }
 
-int main() {
+int main(int argc, char* argv[]) {
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     std::cout << "SDL Init Failed: " << SDL_GetError() << std::endl;
     return 1;
