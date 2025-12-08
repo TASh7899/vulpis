@@ -23,71 +23,91 @@ struct Node {
 
   int spacing = 0;
   int margin = 0;
+  int marginTop = 0, marginBottom = 0, marginLeft = 0, marginRight = 0;
   int padding = 0;
+  int paddingTop = 0, paddingBottom = 0, paddingLeft = 0, paddingRight = 0;
 
-  SDL_Color color = {255, 255, 255, 255};
+
+  SDL_Color color = {0,0,0,0};
+  bool hasBackground = false;
 };
 
+
 Node* buildNode(lua_State* L, int idx) {
-  luaL_checktype(L, idx, LUA_TTABLE);
+    luaL_checktype(L, idx, LUA_TTABLE);
 
-  Node* n = new Node();
+    Node* n = new Node();
 
-  // type
-  lua_getfield(L, idx, "type");
-  if (lua_isstring(L, -1)) 
-    n->type = lua_tostring(L, -1);
-  lua_pop(L, 1);
+    // type
+    lua_getfield(L, idx, "type");
+    if (lua_isstring(L, -1))
+        n->type = lua_tostring(L, -1);
+    lua_pop(L, 1);
 
-  // spacing
-  lua_getfield(L, idx, "spacing");
-  n->spacing = luaL_optinteger(L, -1, 0);
-  lua_pop(L, 1);
+    lua_getfield(L, idx, "style");
+    bool hasStyle = lua_istable(L, -1);
 
-  // width
-  lua_getfield(L, idx, "w");
-  n->w = luaL_optinteger(L, -1, 0);
-  lua_pop(L, 1);
+    auto getInt = [&](const char* key, int defaultVal) {
+        int val = defaultVal;
+        if (hasStyle) {
+            lua_getfield(L, -1, key);
+            if (lua_isnumber(L, -1))
+                val = lua_tointeger(L, -1);
+            lua_pop(L, 1);
+        }
+        return val;
+    };
 
-  // height
-  lua_getfield(L, idx, "h");
-  n->h = luaL_optinteger(L, -1, 0);
-  lua_pop(L, 1);
+    n->w = getInt("w", 0);
+    n->h = getInt("h", 0);
 
-  // padding
-  lua_getfield(L, idx, "padding");
-  n->padding = luaL_optinteger(L, -1, 0);
-  lua_pop(L, 1);
+    n->spacing = getInt("spacing", 0);
 
-  // margin
-  lua_getfield(L, idx, "margin");
-  n->margin = luaL_optinteger(L, -1, 0);
-  lua_pop(L, 1);
+    int p = getInt("padding", 0);
 
-  // color
-  lua_getfield(L, idx, "color");
-  if (lua_istable(L, -1)) {
-    lua_rawgeti(L, -1, 1); n->color.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-    lua_rawgeti(L, -1, 2); n->color.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-    lua_rawgeti(L, -1, 3); n->color.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-    n->color.a = 255;
-  }
-  lua_pop(L, 1);
+    n->padding      = p;
+    n->paddingTop    = getInt("paddingTop", p);
+    n->paddingBottom = getInt("paddingBottom", p);
+    n->paddingLeft   = getInt("paddingLeft", p);
+    n->paddingRight  = getInt("paddingRight", p);
 
-  // children
-  lua_getfield(L, idx, "children");
-  if (lua_istable(L, -1)) {
-    lua_pushnil(L);
-    while (lua_next(L, -2) != 0) {
-      Node* child = buildNode(L, lua_gettop(L));
-      n->children.push_back(child);
-      lua_pop(L, 1);
+    int m = getInt("margin", 0);
+
+    n->margin       = m;
+    n->marginTop    = getInt("marginTop", m);
+    n->marginBottom = getInt("marginBottom", m);
+    n->marginLeft   = getInt("marginLeft", m);
+    n->marginRight  = getInt("marginRight", m);
+
+    if (hasStyle) {
+        lua_getfield(L, -1, "color");
+        if (lua_istable(L, -1)) {
+            lua_rawgeti(L, -1, 1); n->color.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+            lua_rawgeti(L, -1, 2); n->color.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+            lua_rawgeti(L, -1, 3); n->color.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+            lua_rawgeti(L, -1, 4); n->color.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+
+            n->hasBackground = true;
+        }
+        lua_pop(L, 1);
     }
-  }
-  lua_pop(L, 1);
 
-  return n;
+    lua_pop(L, 1);
+
+    lua_getfield(L, idx, "children");
+    if (lua_istable(L, -1)) {
+        lua_pushnil(L);
+        while (lua_next(L, -2) != 0) {
+            Node* child = buildNode(L, lua_gettop(L));
+            n->children.push_back(child);
+            lua_pop(L, 1);
+        }
+    }
+    lua_pop(L, 1);
+
+    return n;
 }
+
 
 void measure(Node* n) {
 
@@ -98,19 +118,19 @@ void measure(Node* n) {
     for (Node* c : n->children) {
       measure(c);
 
-      int childH = c->h + (2 * c->margin);
-      int childW = c->w + (2 * c->margin);
+      int childH = c->h + c->marginBottom + c->marginTop;
+      int childW = c->w + c->marginLeft + c->marginRight;
 
       totalH += childH + n->spacing;
       maxW = std::max(maxW, childW);
     }
 
     if (!n->children.empty()) {
-      totalH -= n->spacing; // remove last added spacing
+      totalH -= n->spacing;
     }
 
-    n->w = maxW + (2 * n->padding);
-    n->h = totalH + (2 * n->padding);
+    n->w = maxW + n->paddingLeft + n->paddingRight;
+    n->h = totalH + n->paddingTop + n->paddingBottom;
   }
   else if (n->type == "hstack") {
     int totalW = 0;
@@ -119,8 +139,8 @@ void measure(Node* n) {
     for (Node* c : n->children) {
       measure(c);
 
-      int childH = c->h + (2 * c->margin);
-      int childW = c->w + (2 * c->margin);
+      int childH = c->h + c->marginTop + c->marginBottom;
+      int childW = c->w + c->marginLeft + c->marginRight;
 
       totalW += childW + n->spacing;
       maxH = std::max(maxH, childH);
@@ -130,8 +150,8 @@ void measure(Node* n) {
       totalW -= n->spacing;
     }
 
-    n->w = totalW + (2 * n->padding);
-    n->h = maxH + (2 * n->padding);
+    n->w = totalW + n->paddingRight + n->paddingLeft;
+    n->h = maxH + n->paddingTop + n->paddingBottom;
   }
 }
 
@@ -140,30 +160,36 @@ void layout(Node* n, int x, int y) {
   n->y = y;
 
   if (n->type == "vstack") {
-    int cursor = y + n->padding;
+    int cursor = y + n->paddingTop;
 
     for (Node* c : n->children) {
-      int cx = x + n->padding + c->margin;
-      int cy = cursor + c->margin;
+      int cx = x + n->paddingLeft + c->marginLeft;
+      int cy = cursor + c->marginTop;
 
       layout(c, cx, cy);
-      cursor += c->h + n->spacing + (2 * c->margin);
+      cursor += c->h + n->spacing + c->marginTop + c->marginBottom;
     }
   }
   else if (n->type == "hstack") {
-    int cursor = x + n->padding; 
+    int cursor = x + n->paddingLeft; 
 
     for (Node* c : n->children) {
-      int cx = cursor + c->margin;
-      int cy = y + n->padding + c->margin;
+      int cx = cursor + c->marginLeft;
+      int cy = y + n->paddingTop + c->marginTop;
 
       layout(c, cx, cy);
-      cursor += c->w + n->spacing + (2 * c->margin);
+      cursor += c->w + n->spacing + c->marginRight + c->marginLeft;
     }
   }
 }
 
 void renderNode(SDL_Renderer* r, Node* n) {
+  if ((n->type == "hstack" || n->type == "vstack") && n->hasBackground) {
+    SDL_SetRenderDrawColor(r, n->color.r, n->color.g, n->color.b, n->color.a);
+    SDL_Rect bg = { n->x, n->y, n->w, n->h };
+    SDL_RenderFillRect(r, &bg);
+  }
+
   if (n->type == "rect") {
     SDL_SetRenderDrawColor(r, n->color.r, n->color.g, n->color.b, n->color.a);
     SDL_Rect rect = { n->x, n->y, n->w, n->h };
@@ -215,9 +241,20 @@ int main() {
     return 1;
   }
 
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
   // initializing lua
   lua_State* L = luaL_newstate();
   luaL_openlibs(L);
+
+  lua_getglobal(L, "package");
+  lua_getfield(L, -1, "path");
+  std::string cur_path = lua_tostring(L, -1);
+  cur_path += ";../lua/?.lua;../lua/?/init.lua";
+  lua_pop(L, 1);
+  lua_pushstring(L, cur_path.c_str());
+  lua_setfield(L, -2, "path");
+  lua_pop(L, 1);
 
   if (luaL_dofile(L, "../lua/app.lua") != LUA_OK) {
     std::cout << "Lua Error: " << lua_tostring(L, -1) << std::endl;
