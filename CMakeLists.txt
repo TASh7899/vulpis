@@ -10,6 +10,7 @@ include_directories(${Lua_INCLUDE_DIRS})
 
 add_executable(vulpis
   src/main.cpp
+  src/ui.cpp
 )
 
 target_link_libraries(vulpis
