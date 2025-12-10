@@ -1,4 +1,4 @@
-local elements = require("ui.elements")
+local elements = require("utils.core.elements")
 
 local VStack = elements.VStack
 local HStack = elements.HStack

@@ -1,5 +1,4 @@
 #include "ui.h"
-
 #include <algorithm>
 
 Node* buildNode(lua_State* L, int idx) {

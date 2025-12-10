@@ -5,6 +5,7 @@ out/
 dist/
 Debug/
 Release/
+lua/
 *.o
 *.obj
 *.a
@@ -78,3 +79,5 @@ lsan.log
 # Crash dumps
 core
 *.core
+
+

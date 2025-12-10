@@ -9,8 +9,8 @@ include_directories(${SDL2_INCLUDE_DIRS})
 include_directories(${Lua_INCLUDE_DIRS})
 
 add_executable(vulpis
-  src/main.cpp
-  src/ui.cpp
+  engine/main.cpp
+  engine/components/ui.cpp
 )
 
 target_link_libraries(vulpis

@@ -6,7 +6,7 @@
 #include <iostream>
 #include <string>
 
-#include "ui.h"
+#include "components/ui.h"
 
 int main(int argc, char* argv[]) {
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -50,14 +50,28 @@ int main(int argc, char* argv[]) {
 
   lua_getglobal(L, "package");
   lua_getfield(L, -1, "path");
-  std::string cur_path = lua_tostring(L, -1);
-  cur_path += ";../lua/?.lua;../lua/?/init.lua";
+  std::string paths = lua_tostring(L, -1);
   lua_pop(L, 1);
-  lua_pushstring(L, cur_path.c_str());
+  
+
+paths =
+    "../?.lua;"
+    "../?/init.lua;"
+
+    "../utils/?.lua;"
+    "../utils/?/init.lua;"
+
+    "../src/?.lua;"
+    "../src/?/init.lua;"
+
+    "../lua/?.lua;"
+    "../lua/?/init.lua;"
+    + paths;
+  lua_pushstring(L, paths.c_str());
   lua_setfield(L, -2, "path");
   lua_pop(L, 1);
 
-  if (luaL_dofile(L, "../lua/app.lua") != LUA_OK) {
+  if (luaL_dofile(L, "../src/app.lua") != LUA_OK) {
     std::cout << "Lua Error: " << lua_tostring(L, -1) << std::endl;
     lua_close(L);
     SDL_DestroyRenderer(renderer);
