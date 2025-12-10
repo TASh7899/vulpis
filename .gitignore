@@ -76,8 +76,5 @@ lsan.log
 .env
 .env.local
 
-# Crash dumps
-core
-*.core
 
 
