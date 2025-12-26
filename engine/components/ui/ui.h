@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <SDL2/SDL.h>
+#include "layout.h"
 
 extern "C" {
 #include <lua.h>
@@ -25,6 +26,8 @@ struct Node {
 
   SDL_Color color = {0,0,0,0};
   bool hasBackground = false;
+
+  LayoutProperties layout;
 };
 
 Node* buildNode(lua_State* L, int idx);

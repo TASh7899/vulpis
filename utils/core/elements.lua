@@ -12,6 +12,7 @@ function elements.mergeStyles(base, override)
 	return res
 end
 
+
 local function createStack(typeName, props)
 	props = props or {}
 
@@ -30,6 +31,7 @@ end
 function elements.HStack(props)
 	return createStack("hstack", props)
 end
+
 
 function elements.Rect(props)
 	props = props or {}
