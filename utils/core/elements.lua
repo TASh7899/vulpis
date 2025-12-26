@@ -1,5 +1,17 @@
 local elements = {}
 
+function elements.mergeStyles(base, override)
+	local res = {}
+	for k, v in pairs(base or {}) do
+		res[k] = v
+	end
+	for k, v in pairs(override or {}) do
+		res[k] = v
+	end
+
+	return res
+end
+
 local function createStack(typeName, props)
 	props = props or {}
 

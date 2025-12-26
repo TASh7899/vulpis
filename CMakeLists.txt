@@ -10,7 +10,8 @@ include_directories(${Lua_INCLUDE_DIRS})
 
 add_executable(vulpis
   engine/main.cpp
-  engine/components/ui.cpp
+  engine/components/ui/ui.cpp
+  engine/components/color/color.cpp
 )
 
 target_link_libraries(vulpis

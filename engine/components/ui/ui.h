@@ -1,4 +1,3 @@
-// UI declarations and data structures
 #pragma once
 
 #include <string>

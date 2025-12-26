@@ -1,5 +1,7 @@
 #include "ui.h"
 #include <algorithm>
+#include <lua.h>
+#include "../color/color.h"
 
 Node* buildNode(lua_State* L, int idx) {
     luaL_checktype(L, idx, LUA_TTABLE);
@@ -33,7 +35,7 @@ Node* buildNode(lua_State* L, int idx) {
 
     int p = getInt("padding", 0);
 
-    n->padding      = p;
+    n->padding       = p;
     n->paddingTop    = getInt("paddingTop", p);
     n->paddingBottom = getInt("paddingBottom", p);
     n->paddingLeft   = getInt("paddingLeft", p);
@@ -48,8 +50,13 @@ Node* buildNode(lua_State* L, int idx) {
     n->marginRight  = getInt("marginRight", m);
 
     if (hasStyle) {
-        lua_getfield(L, -1, "color");
-        if (lua_istable(L, -1)) {
+        lua_getfield(L, -1, "BGColor");
+        if (lua_isstring(L, -1)) {
+          const char* hex = lua_tostring(L, -1);
+          n->color = parseHexColor(hex);
+          n->hasBackground = true;
+        }
+        else if (lua_istable(L, -1)) {
             lua_rawgeti(L, -1, 1); n->color.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
             lua_rawgeti(L, -1, 2); n->color.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
             lua_rawgeti(L, -1, 3); n->color.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
@@ -97,8 +104,8 @@ void measure(Node* n) {
       totalH -= n->spacing;
     }
 
-    n->w = maxW + n->paddingLeft + n->paddingRight;
-    n->h = totalH + n->paddingTop + n->paddingBottom;
+    if (n->w == 0) n->w = maxW + n->paddingLeft + n->paddingRight;
+    if (n->h == 0) n->h = totalH + n->paddingTop + n->paddingBottom;
   }
   else if (n->type == "hstack") {
     int totalW = 0;
@@ -118,8 +125,8 @@ void measure(Node* n) {
       totalW -= n->spacing;
     }
 
-    n->w = totalW + n->paddingRight + n->paddingLeft;
-    n->h = maxH + n->paddingTop + n->paddingBottom;
+    if (n->w == 0) n->w = totalW + n->paddingRight + n->paddingLeft;
+    if (n->h == 0) n->h = maxH + n->paddingTop + n->paddingBottom;
   }
 }
 
