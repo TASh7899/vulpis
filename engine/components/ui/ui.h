@@ -4,6 +4,11 @@
 #include <vector>
 #include <SDL2/SDL.h>
 
+enum UnitType {
+  PIXEL,
+  PERCENT,
+};
+
 extern "C" {
 #include <lua.h>
 #include <lauxlib.h>
@@ -26,12 +31,40 @@ enum class Align {
   Stretch
 };
 
+struct Length {
+  float value;
+  UnitType type;
+
+  Length() : value(0), type(UnitType::PIXEL) {}
+  Length(float v) : value(v), type(UnitType::PIXEL) {}
+  Length(int v) : value((float)v), type(UnitType::PIXEL) {}
+
+  static Length Percent(float v) {
+    Length l;
+    l.value = v;
+    l.type = UnitType::PERCENT;
+    return l;
+  }
+  
+  float resolve(float parentSize) const {
+    if (type == UnitType::PIXEL) return value;
+    return parentSize * (value/100.0f);
+  }
+};
+
+inline Length pct(float v) {
+  return Length::Percent(v);
+}
+
 struct Node {
   std::string type;
   std::vector<Node*> children;
 
-  int x = 0, y = 0;
-  int w = 0, h = 0;
+  float x = 0, y = 0;
+  float w = 0, h = 0;
+
+  Length widthStyle;
+  Length heightStyle;
 
   int spacing = 0;
   int margin = 0;
@@ -39,8 +72,8 @@ struct Node {
   int padding = 0;
   int paddingTop = 0, paddingBottom = 0, paddingLeft = 0, paddingRight = 0;
 
-  int minWidth = 0, maxWidth = 99999;
-  int minHeight = 0, maxHeight = 99999;
+  float minWidth = 0, maxWidth = 99999.0f;
+  float minHeight = 0, maxHeight = 99999.0f;
 
   float flexGrow = 0.0f;
   Align alignItems = Align::Start;
@@ -50,7 +83,8 @@ struct Node {
   bool hasBackground = false;
 };
 
+
 Node* buildNode(lua_State* L, int idx);
 void renderNode(SDL_Renderer* r, Node* n);
 void freeTree(Node* n);
-
+void resolveStyles(Node* n, int parentW, int parentH);

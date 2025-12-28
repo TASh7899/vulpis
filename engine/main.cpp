@@ -15,12 +15,15 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  int winW = 800;
+  int winH = 600;
+
   SDL_Window* window = SDL_CreateWindow(
     "Vulpis window",
     SDL_WINDOWPOS_CENTERED,
     SDL_WINDOWPOS_CENTERED,
-    800,
-    600,
+    winW,
+    winH,
     SDL_WINDOW_SHOWN
   );
 
@@ -91,7 +94,7 @@ paths =
       }
     }
 
-    // nigga, Build UI tree from Lua 
+    // Build UI tree from Lua 
     lua_getglobal(L, "UI");
     if (!lua_istable(L, -1)) {
       lua_pop(L, 1);
@@ -103,6 +106,8 @@ paths =
 
     Node* root = buildNode(L, -1);
     lua_pop(L, 1);
+
+    resolveStyles(root, winW, winH);
 
     // Layout hehe
     Layout::measure(root);
