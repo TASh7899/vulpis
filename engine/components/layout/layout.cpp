@@ -3,16 +3,16 @@
 
 namespace Layout {
 
-void measure(Node* n) {
+void measure(Node* n, bool isRoot) {
 
   for (Node* c : n->children) {
-    Layout::measure(c);
+    Layout::measure(c, false);
   }
 
   int contentH = 0;
   int contentW = 0;
 
-  if (n->type == "vstack") {
+  if (n->type == "vbox") {
     for (Node* c : n->children) {
       int childH = c->h + c->marginBottom + c->marginTop;
       int childW = c->w + c->marginLeft + c->marginRight;
@@ -25,7 +25,7 @@ void measure(Node* n) {
       contentH += n->spacing * (n->children.size() - 1);
     }
   }
-  else if (n->type == "hstack") {
+  else if (n->type == "hbox") {
     for (Node* c : n->children) {
       int childH = c->h + c->marginTop + c->marginBottom;
       int childW = c->w + c->marginLeft + c->marginRight;
@@ -39,8 +39,20 @@ void measure(Node* n) {
   contentW += n->paddingLeft + n->paddingRight;
   contentH += n->paddingTop + n->paddingBottom;
 
-  if (n->w == 0) n->w = contentW;
-  if (n->h == 0) n->h = contentH;
+  if (n->w == 0) {
+    if (isRoot) {
+      n->w = 800;  // Default window width
+    } else {
+      n->w = contentW;
+    }
+  }
+  if (n->h == 0) {
+    if (isRoot) {
+      n->h = 600;  // Default window height
+    } else {
+      n->h = contentH;
+    }
+  }
 
   n->w = std::max(n->minWidth, std::min(n->w, n->maxWidth));
   n->h = std::max(n->minHeight, std::min(n->h, n->maxHeight));
@@ -60,7 +72,7 @@ void compute(Node* n, int x, int y) {
   float totalFlex = 0.0f;
   int childCount = n->children.size();
 
-  bool isRow = (n->type == "hstack");
+  bool isRow = (n->type == "hbox");
 
   for (Node* c : n->children) {
     totalFlex += c->flexGrow;

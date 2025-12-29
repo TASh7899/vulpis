@@ -129,7 +129,7 @@ Node* buildNode(lua_State* L, int idx) {
 }
 
 void renderNode(SDL_Renderer* r, Node* n) {
-  if ((n->type == "hstack" || n->type == "vstack") && n->hasBackground) {
+  if ((n->type == "hbox" || n->type == "vbox") && n->hasBackground) {
     SDL_SetRenderDrawColor(r, n->color.r, n->color.g, n->color.b, n->color.a);
     SDL_Rect bg = { n->x, n->y, n->w, n->h };
     SDL_RenderFillRect(r, &bg);

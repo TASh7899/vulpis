@@ -12,35 +12,53 @@ function elements.mergeStyles(base, override)
 	return res
 end
 
-local function createStack(typeName, props)
+function elements.Box(props)
 	props = props or {}
-
+	
+	-- Default to horizontal box unless direction == "vertical"
+	local boxType = "hbox"
+	if props.direction == "vertical" then
+		boxType = "vbox"
+	end
+	
 	local node = {
-		type = typeName,
+		type = boxType,
 		style = props.style or {},
 		children = props.children or {},
 	}
 	return node
 end
 
-function elements.VStack(props)
-	return createStack("vstack", props)
-end
-
-function elements.HStack(props)
-	return createStack("hstack", props)
-end
-
-function elements.Rect(props)
+function elements.VBox(props)
 	props = props or {}
+	props.direction = "vertical"
+	return elements.Box(props)
+end
 
-	local node = {
-		type = "rect",
-		style = props.style or {},
-		children = nil,
+function elements.HBox(props)
+	props = props or {}
+	-- direction defaults to horizontal, so we can just call Box
+	return elements.Box(props)
+end
+
+-- Example reusable component: Card
+function elements.Card(props)
+	props = props or {}
+	
+	local defaultStyle = {
+		BGColor = "#2a2a2a",
+		padding = 16,
+		w = 200,
+		h = 150
 	}
-
-	return node
+	
+	local mergedStyle = elements.mergeStyles(defaultStyle, props.style or {})
+	
+	return elements.Box({
+		direction = "vertical",
+		style = mergedStyle,
+		children = props.children or {}
+	})
 end
 
 return elements

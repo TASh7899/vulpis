@@ -8,6 +8,7 @@
 
 #include "components/ui/ui.h"
 #include "components/layout/layout.h"
+#include "core/window.h"
 
 int main(int argc, char* argv[]) {
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -15,14 +16,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  SDL_Window* window = SDL_CreateWindow(
-    "Vulpis window",
-    SDL_WINDOWPOS_CENTERED,
-    SDL_WINDOWPOS_CENTERED,
-    800,
-    600,
-    SDL_WINDOW_SHOWN
-  );
+  SDL_Window* window = createWindow("Vulpis window", 800, 600);
 
   if (!window) {
     std::cout << "Window Creation Failed: " << SDL_GetError() << std::endl;
@@ -48,6 +42,9 @@ int main(int argc, char* argv[]) {
   // initializing lua
   lua_State* L = luaL_newstate();
   luaL_openlibs(L);
+  
+  // Register window functions
+  registerWindowFunctions(L, window);
 
   lua_getglobal(L, "package");
   lua_getfield(L, -1, "path");
@@ -105,7 +102,7 @@ paths =
     lua_pop(L, 1);
 
     // Layout hehe
-    Layout::measure(root);
+    Layout::measure(root, true);
     Layout::compute(root, 0, 0);
 
     // Render (render my love for tanush)
@@ -119,7 +116,7 @@ paths =
   }
 
   SDL_DestroyRenderer(renderer);
-  SDL_DestroyWindow(window);
+  destroyWindow(window);
   SDL_Quit();
   lua_close(L);
   return 0;
