@@ -10,6 +10,9 @@
 #include "components/ui/ui.h"
 #include "components/layout/layout.h"
 #include "components/core/window.h"
+#include "components/state/state.h"
+#include "components/input/input.h"
+#include "components/vdom/vdom.h"
 
 int main(int argc, char* argv[]) {
   //prompt for window size before sdl initialization 
@@ -109,8 +112,8 @@ int main(int argc, char* argv[]) {
   lua_State* L = luaL_newstate();
   luaL_openlibs(L);
   
-  
   registerWindowFunctions(L, window);
+  registerStateBindings(L);
 
   lua_getglobal(L, "package");
   lua_getfield(L, -1, "path");
@@ -144,6 +147,39 @@ paths =
     return 1;
   }
 
+  lua_getglobal(L, "App");
+  if (!lua_isfunction(L, -1)) {
+      std::cerr << "Error: Global 'App' function not found in app.lua" << std::endl;
+      return 1;
+  }
+
+  // 2. Call App()
+  if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+      std::cerr << "Error calling App(): " << lua_tostring(L, -1) << std::endl;
+      lua_pop(L, 1);
+      return 1;
+  }
+
+  // 3. Now the return value is on stack
+  if (!lua_istable(L, -1)) {
+      std::cerr << "Error: App() did not return a table" << std::endl;
+      lua_pop(L, 1);
+      return 1;
+  }
+
+  Node* root = buildNode(L, -1);
+  lua_pop(L, 1);
+
+  int winW = windowWidth;
+  int winH = windowHeight;
+
+  resolveStyles(root, winW, winH);
+  Layout::measure(root);
+  Layout::compute(root, 0, 0);
+
+  root->isLayoutDirty = false;
+  root->isPaintDirty = false;
+
   bool running = true;
   SDL_Event event;
 
@@ -152,39 +188,56 @@ paths =
       if (event.type == SDL_QUIT) {
         running = false;
       }
+
+      Input::handleEvent(L, event, root);
+
+      if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+        winW = event.window.data1;
+        winH = event.window.data2;
+        root->makeLayoutDirty();
+      }
     }
 
-     
-    lua_getglobal(L, "UI");
-    if (!lua_istable(L, -1)) {
-      lua_pop(L, 1);
-      SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
-      SDL_RenderClear(renderer);
-      SDL_RenderPresent(renderer);
-      continue;
+    if (StateManager::instance().isDirty()) {
+      lua_getglobal(L, "App");
+      if (!lua_isfunction(L, -1)) {
+        std::cerr << "Error: App is not a function during reconcile" << std::endl;
+        lua_pop(L, 1);
+      } else {
+
+        if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+          std::cerr << "Error calling App(): "
+            << lua_tostring(L, -1) << std::endl;
+          lua_pop(L, 1);
+        } else {
+
+          VDOM::reconcile(L, root, -1);
+          lua_pop(L, 1);
+        }
+      }
+
+      StateManager::instance().clearDirty();
     }
 
-    Node* root = buildNode(L, -1);
-    lua_pop(L, 1);
+    if (root->isLayoutDirty) {
+      resolveStyles(root, winW, winH);
+      Layout::measure(root);
+      Layout::compute(root, 0, 0);
+      root->isLayoutDirty = false;
+    }
 
-    // Layout hehe
-    Layout::measure(root, true, windowWidth, windowHeight);
-    Layout::compute(root, 0, 0);
-
-    // Render (render my love for tanush)
-    SDL_SetRenderDrawColor(renderer ,30,30,30,255);
+    SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
     SDL_RenderClear(renderer);
+
     renderNode(renderer, root);
     SDL_RenderPresent(renderer);
-
-    // Cleanup 
-    freeTree(root);
   }
 
+  freeTree(root);
   SDL_DestroyRenderer(renderer);
   destroyWindow(window);
   SDL_Quit();
-  lua_close(L);
+  lua_close(L);;
   return 0;
 }
 

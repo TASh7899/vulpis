@@ -15,7 +15,7 @@ end
 function elements.Box(props)
 	props = props or {}
 	
-	--default to horizontal box unless direction == "vertical"
+	-- default to horizontal box unless direction == "vertical"
 	local boxType = "hbox"
 	if props.direction == "vertical" then
 		boxType = "vbox"
@@ -37,7 +37,7 @@ end
 
 function elements.HBox(props)
 	props = props or {}
-	--direction defaults to horizontal, so we can just call box
+	-- direction defaults to horizontal, so we can just call Box
 	return elements.Box(props)
 end
 
