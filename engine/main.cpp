@@ -173,10 +173,8 @@ paths =
   int winW = windowWidth;
   int winH = windowHeight;
 
-  resolveStyles(root, winW, winH);
-  Layout::measure(root);
-  Layout::compute(root, 0, 0);
-
+  Layout::LayoutSolver* solver = Layout::createYogaSolver();
+  solver->solve(root, {winW, winH});
   root->isLayoutDirty = false;
   root->isPaintDirty = false;
 
@@ -220,9 +218,7 @@ paths =
     }
 
     if (root->isLayoutDirty) {
-      resolveStyles(root, winW, winH);
-      Layout::measure(root);
-      Layout::compute(root, 0, 0);
+      solver->solve(root, {winW, winH});
       root->isLayoutDirty = false;
     }
 

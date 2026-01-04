@@ -77,3 +77,4 @@ lsan.log
 
 *.core
 
+.cache/

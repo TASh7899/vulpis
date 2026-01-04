@@ -3,10 +3,10 @@
 
 namespace Layout {
 
-void measure(Node* n, bool isRoot, int windowWidth, int windowHeight) {
+void DefaultLayoutSolver::measure(Node* n) {
 
   for (Node* c : n->children) {
-    Layout::measure(c, false, windowWidth, windowHeight);
+    DefaultLayoutSolver::measure(c);
   }
 
   int contentH = 0;
@@ -40,18 +40,10 @@ void measure(Node* n, bool isRoot, int windowWidth, int windowHeight) {
   contentH += n->paddingTop + n->paddingBottom;
 
   if (n->w == 0) {
-    if (isRoot) {
-      n->w = windowWidth;  // Use dynamic window width
-    } else {
-      n->w = contentW;
-    }
+    n->w = contentW;
   }
   if (n->h == 0) {
-    if (isRoot) {
-      n->h = windowHeight;  // Use dynamic window height
-    } else {
-      n->h = contentH;
-    }
+    n->h = contentH;
   }
 
   n->w = std::max(n->minWidth, std::min(n->w, n->maxWidth));
@@ -59,7 +51,7 @@ void measure(Node* n, bool isRoot, int windowWidth, int windowHeight) {
 }
 
 
-void compute(Node* n, int x, int y) {
+void DefaultLayoutSolver::compute(Node* n, int x, int y) {
   n->x = x;
   n->y = y;
 
@@ -146,4 +138,11 @@ void compute(Node* n, int x, int y) {
     }
   }
 }
+
+void DefaultLayoutSolver::solve(Node* root, Size viewport) {
+  resolveStyles(root, viewport.w, viewport.h);
+  measure(root);
+  compute(root, 0, 0);
+}
+
 }
