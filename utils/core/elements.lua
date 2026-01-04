@@ -12,6 +12,21 @@ function elements.mergeStyles(base, override)
 	return res
 end
 
+function elements.mergeChildren(listA, listB)
+	local res = {}
+	if listA then
+		for _, child in ipairs(listA) do
+			table.insert(res, child)
+		end
+	end
+	if listB then
+		for _, child in ipairs(listB) do
+			table.insert(res, child)
+		end
+	end
+	return res
+end
+
 function elements.Box(props)
 	props = props or {}
 	
