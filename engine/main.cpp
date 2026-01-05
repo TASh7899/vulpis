@@ -20,36 +20,8 @@ int main(int argc, char* argv[]) {
 
   int winW = 800;
   int winH = 600;
-
-  SDL_Window* window = SDL_CreateWindow(
-    "Vulpis window",
-    SDL_WINDOWPOS_CENTERED,
-    SDL_WINDOWPOS_CENTERED,
-    winW,
-    winH,
-    SDL_WINDOW_SHOWN
-  );
-
-  if (!window) {
-    std::cout << "Window Creation Failed: " << SDL_GetError() << std::endl;
-    SDL_Quit();
-    return 1;
-  }
-
-  SDL_Renderer* renderer = SDL_CreateRenderer(
-    window,
-    -1,
-    SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
-  );
-
-  if (!renderer) {
-    std::cout << "Renderer Creation Failed: " << SDL_GetError() << std::endl;
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
-  }
-
-  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  SDL_Window* window = nullptr;
+  SDL_Renderer* renderer = nullptr;
 
   // initializing lua
   lua_State* L = luaL_newstate();
@@ -108,8 +80,73 @@ paths =
       return 1;
   }
 
+  // Check for style.w and style.h in the returned table before building the node.
+  bool hasExplicitSize = false;
+  lua_getfield(L, -1, "style"); // pushes style (or nil)
+  if (lua_istable(L, -1)) {
+    lua_getfield(L, -1, "w");
+    bool hasW = lua_isnumber(L, -1);
+    if (hasW) {
+      winW = (int)lua_tointeger(L, -1);
+    }
+    lua_pop(L, 1);
+
+    lua_getfield(L, -1, "h");
+    bool hasH = lua_isnumber(L, -1);
+    if (hasH) {
+      winH = (int)lua_tointeger(L, -1);
+    }
+    lua_pop(L, 1);
+
+    hasExplicitSize = hasW && hasH;
+  }
+  lua_pop(L, 1); // pop style or nil
+
   Node* root = buildNode(L, -1);
   lua_pop(L, 1);
+
+  // Create the SDL window now that we know whether explicit size was provided.
+  Uint32 windowFlags = SDL_WINDOW_SHOWN;
+  if (!hasExplicitSize) {
+    windowFlags |= SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE;
+  }
+
+  window = SDL_CreateWindow(
+    "Vulpis window",
+    SDL_WINDOWPOS_CENTERED,
+    SDL_WINDOWPOS_CENTERED,
+    winW,
+    winH,
+    windowFlags
+  );
+
+  if (!window) {
+    std::cout << "Window Creation Failed: " << SDL_GetError() << std::endl;
+    lua_close(L);
+    SDL_Quit();
+    return 1;
+  }
+
+  // If explicit size provided, ensure the window size is set accordingly.
+  if (hasExplicitSize) {
+    SDL_SetWindowSize(window, winW, winH);
+  }
+
+  renderer = SDL_CreateRenderer(
+    window,
+    -1,
+    SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
+  );
+
+  if (!renderer) {
+    std::cout << "Renderer Creation Failed: " << SDL_GetError() << std::endl;
+    SDL_DestroyWindow(window);
+    lua_close(L);
+    SDL_Quit();
+    return 1;
+  }
+
+  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
   Layout::LayoutSolver* solver = Layout::createYogaSolver();
   solver->solve(root, {winW, winH});

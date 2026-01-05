@@ -1,5 +1,10 @@
 #pragma once
+#ifndef _WIN32
 #include <endian.h>
+#else
+// Windows doesn't have endian.h, but we can define what we need or skip it 
+// if it's not actually used for critical types in this header.
+#endif
 #include <string>
 #include <unordered_map>
 #include <variant>

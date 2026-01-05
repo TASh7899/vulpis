@@ -29,39 +29,30 @@ function elements.mergeChildren(listA, listB)
 	return res
 end
 
-local function createStack(typeName, props)
+function elements.Box(props)
+    props = props or {}
+    local typeName = props.type or "hbox" -- Default to horizontal
+
+    local node = {
+        type = typeName,
+        style = props.style or {},
+        children = props.children or {},
+        onClick = props.onClick,
+        key = props.key,
+    }
+    return node
+end
+
+function elements.VBox(props)
 	props = props or {}
-
-	local node = {
-		type = typeName,
-		style = props.style or {},
-		children = props.children or {},
-		onClick = props.onClick,
-		key = props.key,
-	}
-	return node
+	props.type = "vbox"
+	return elements.Box(props)
 end
 
-function elements.VStack(props)
-	return createStack("vstack", props)
-end
-
-function elements.HStack(props)
-	return createStack("hstack", props)
-end
-
-function elements.Rect(props)
+function elements.HBox(props)
 	props = props or {}
-
-	local node = {
-		type = "rect",
-		style = props.style or {},
-		children = nil,
-		onClick = props.onClick,
-		key = props.key,
-	}
-
-	return node
+	props.type = "hbox"
+	return elements.Box(props)
 end
 
 return elements

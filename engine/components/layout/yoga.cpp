@@ -23,9 +23,9 @@ namespace Layout {
     private:
       YGNodeRef buildTree(Node* n) {
         YGNodeRef yogaNode = YGNodeNew();
-        if (n->type == "vstack") {
+        if (n->type == "vbox") {
           YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionColumn);
-        } else if (n->type == "hstack") {
+        } else if (n->type == "hbox") {
           YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionRow);
         }
 

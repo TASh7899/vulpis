@@ -12,7 +12,7 @@ void DefaultLayoutSolver::measure(Node* n) {
   int contentH = 0;
   int contentW = 0;
 
-  if (n->type == "vstack") {
+  if (n->type == "vbox") {
     for (Node* c : n->children) {
       int childH = c->h + c->marginBottom + c->marginTop;
       int childW = c->w + c->marginLeft + c->marginRight;
@@ -25,7 +25,7 @@ void DefaultLayoutSolver::measure(Node* n) {
       contentH += n->spacing * (n->children.size() - 1);
     }
   }
-  else if (n->type == "hstack") {
+  else if (n->type == "hbox") {
     for (Node* c : n->children) {
       int childH = c->h + c->marginTop + c->marginBottom;
       int childW = c->w + c->marginLeft + c->marginRight;
