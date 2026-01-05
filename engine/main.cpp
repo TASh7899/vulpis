@@ -167,7 +167,7 @@ paths =
     SDL_RenderPresent(renderer);
   }
 
-  freeTree(root);
+  freeTree(L, root);
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();

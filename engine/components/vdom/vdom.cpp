@@ -1,4 +1,5 @@
 #include "vdom.h"
+#include <lauxlib.h>
 #include <lua.h>
 #include <string>
 #include <vector>
@@ -64,6 +65,10 @@ namespace VDOM {
       }
       ref = luaL_ref(L, LUA_REGISTRYINDEX);
     } else {
+      if (ref != -2) {
+        luaL_unref(L, LUA_REGISTRYINDEX, ref);
+        ref = -2;
+      }
       lua_pop(L, 1);
     }
   }
@@ -72,7 +77,7 @@ namespace VDOM {
     lua_getfield(L, idx, "style");
     if (!lua_istable(L, -1)) {
       lua_pop(L, 1);
-      return;
+      lua_newtable(L);
     }
 
     bool layoutChanged = false;
@@ -194,7 +199,7 @@ namespace VDOM {
 
     for (size_t i = 0; i < current->children.size(); i++) {
       if (!reused[i]) {
-        freeTree(current->children[i]);
+        freeTree(L, current->children[i]);
         current->makeLayoutDirty();
       }
     }

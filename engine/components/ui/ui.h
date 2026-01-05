@@ -109,7 +109,7 @@ struct Node {
 
 Node* buildNode(lua_State* L, int idx);
 void renderNode(SDL_Renderer* r, Node* n);
-void freeTree(Node* n);
+void freeTree(lua_State* L, Node* n);
 void resolveStyles(Node* n, int parentW, int parentH);
 void reconcile(lua_State* L, Node* current, int idx);
 Length getLength(lua_State* L, const char* key);

@@ -4,6 +4,7 @@
 #include <SDL2/SDL_render.h>
 #include <algorithm>
 #include <lauxlib.h>
+#include <lua.h>
 #include <string>
 #include "../color/color.h"
 #include "../vdom/vdom.h"
@@ -301,8 +302,17 @@ void renderNode(SDL_Renderer* r, Node* n) {
   
 }
 
-void freeTree(Node* n) {
-  for (Node* c : n->children)
-    freeTree(c);
+void freeTree(lua_State* L, Node* n) {
+  if (!n) return;
+
+  if (n->onClickRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onClickRef);
+    n->onClickRef = -2;
+  }
+
+  for (Node* c : n->children) {
+    freeTree(L, c);
+  }
+
   delete n;
 }
