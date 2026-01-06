@@ -115,6 +115,14 @@ namespace VDOM {
     applyBoxModel("padding", "paddingTop", "paddingBottom", "paddingLeft", "paddingRight", n->padding, n->paddingTop, n->paddingBottom, n->paddingLeft, n->paddingRight);
     applyBoxModel("margin", "marginTop", "marginBottom", "marginLeft", "marginRight", n->margin, n->marginTop, n->marginBottom, n->marginLeft, n->marginRight);
 
+    std::string overflow = getStringProp(L, "overflow", "hidden");
+    bool newOverflowHidden = (overflow != "visible");
+
+    if (n->overflowHidden != newOverflowHidden) {
+      n->overflowHidden = newOverflowHidden;
+      n->makePaintDirty();
+    }
+
     lua_getfield(L, -1, "BGColor");
     if (lua_isstring(L, -1)) {
       const char* hex = lua_tostring(L, -1);

@@ -6,6 +6,8 @@
 #include <iostream>
 #include <string>
 
+#include "components/renderer/commands.h"
+#include "components/renderer/opengl_renderer.h"
 #include "components/ui/ui.h"
 #include "components/layout/layout.h"
 #include "components/state/state.h"
@@ -18,6 +20,10 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+
   int winW = 800;
   int winH = 600;
 
@@ -27,7 +33,7 @@ int main(int argc, char* argv[]) {
     SDL_WINDOWPOS_CENTERED,
     winW,
     winH,
-    SDL_WINDOW_SHOWN
+    SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
   );
 
   if (!window) {
@@ -36,20 +42,7 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  SDL_Renderer* renderer = SDL_CreateRenderer(
-    window,
-    -1,
-    SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC
-  );
-
-  if (!renderer) {
-    std::cout << "Renderer Creation Failed: " << SDL_GetError() << std::endl;
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
-  }
-
-  SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+  OpenGLRenderer renderer(window);
 
   // initializing lua
   lua_State* L = luaL_newstate();
@@ -82,7 +75,6 @@ paths =
   if (luaL_dofile(L, "../src/app.lua") != LUA_OK) {
     std::cout << "Lua Error: " << lua_tostring(L, -1) << std::endl;
     lua_close(L);
-    SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
     SDL_Quit();
     return 1;
@@ -160,15 +152,14 @@ paths =
       root->isLayoutDirty = false;
     }
 
-    SDL_SetRenderDrawColor(renderer, 30, 30, 30, 255);
-    SDL_RenderClear(renderer);
-
-    renderNode(renderer, root);
-    SDL_RenderPresent(renderer);
+    renderer.beginFrame();
+    RenderCommandList cmdList;
+    generateRenderCommands(root, cmdList);
+    renderer.submit(cmdList);
+    renderer.endFrame();
   }
 
   freeTree(L, root);
-  SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
   SDL_Quit();
   lua_close(L);;

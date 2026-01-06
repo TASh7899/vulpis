@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 project(vulpis LANGUAGES CXX)
+cmake_policy(SET CMP0072 NEW)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,6 +9,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 find_package(SDL2 REQUIRED)
 find_package(Lua REQUIRED)
+find_package(OpenGL REQUIRED)
 
 message(STATUS "LUA_INCLUDE_DIR = ${LUA_INCLUDE_DIR}")
 message(STATUS "LUA_LIBRARIES   = ${LUA_LIBRARIES}")
@@ -26,6 +28,7 @@ add_executable(vulpis
   engine/components/state/state.cpp
   engine/components/input/input.cpp
   engine/components/vdom/vdom.cpp
+  engine/components/renderer/opengl_renderer.cpp
 )
 
 
@@ -40,5 +43,6 @@ target_link_libraries(vulpis PRIVATE
   ${SDL2_LIBRARIES}
   ${LUA_LIBRARIES}
   yogacore
+  OpenGL::GL
 )
 

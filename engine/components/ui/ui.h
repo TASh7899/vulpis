@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <SDL2/SDL.h>
+#include "../renderer/commands.h"
 
 enum UnitType {
   PIXEL,
@@ -67,6 +68,8 @@ struct Node {
   Length widthStyle;
   Length heightStyle;
 
+  bool overflowHidden = true;
+
   int spacing = 0;
   int margin = 0;
   int marginTop = 0, marginBottom = 0, marginLeft = 0, marginRight = 0;
@@ -108,7 +111,7 @@ struct Node {
 
 
 Node* buildNode(lua_State* L, int idx);
-void renderNode(SDL_Renderer* r, Node* n);
+void generateRenderCommands(Node* n, RenderCommandList& list);
 void freeTree(lua_State* L, Node* n);
 void resolveStyles(Node* n, int parentW, int parentH);
 void reconcile(lua_State* L, Node* current, int idx);

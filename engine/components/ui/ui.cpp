@@ -128,6 +128,13 @@ Node* buildNode(lua_State* L, int idx) {
     n->alignItems = parseAlign(getString("alignItems", "start"));
     n->justifyContent = parseJustify(getString("justifyContent", "start"));
 
+    std::string overflow = getString("overflow", "hidden");
+    if (overflow == "visible") {
+      n->overflowHidden = false;
+    } else {
+      n->overflowHidden = true;
+    }
+
     if (hasStyle) {
         lua_getfield(L, -1, "BGColor");
         if (lua_isstring(L, -1)) {
@@ -266,40 +273,25 @@ void layout(Node* n, int x, int y) {
   }
 }
 
-void renderNode(SDL_Renderer* r, Node* n) {
-
-  SDL_Rect nodeBox = {
-    (int)n->x,
-    (int)n->y,
-    (int)n->w,
-    (int)n->h,
-  };
-
+void generateRenderCommands(Node *n, RenderCommandList &list) {
   if (n->hasBackground) {
-    SDL_SetRenderDrawColor(r, n->color.r, n->color.g, n->color.b, n->color.a);
-    SDL_RenderFillRect(r, &nodeBox);
+    list.push(DrawRectCommand{
+      {n->x, n->y, n->w, n->h},
+      {n->color.r, n->color.g, n->color.b, n->color.a}
+    });
   }
 
-  SDL_Rect oldClip;
-  SDL_RenderGetClipRect(r, &oldClip);
-
-  if (!SDL_RenderIsClipEnabled(r)) {
-    SDL_RenderGetViewport(r, &oldClip);
+  if (n->overflowHidden) {
+    list.push(PushClipCommand{{n->x, n->y, n->w, n->h}});
   }
 
-  SDL_Rect newClip;
-  bool isVisible = SDL_IntersectRect(&oldClip, &nodeBox, &newClip);
-
-  if (isVisible) {
-    SDL_RenderSetClipRect(r, &newClip);
-
-    for (Node* c : n->children) {
-      renderNode(r, c);
-    }
+  for (Node* c :  n->children) {
+    generateRenderCommands(c, list);
   }
 
-  SDL_RenderSetClipRect(r, &oldClip);
-  
+  if (n->overflowHidden) {
+    list.push(PopClipCommand{});
+  }
 }
 
 void freeTree(lua_State* L, Node* n) {
