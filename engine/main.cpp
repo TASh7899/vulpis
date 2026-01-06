@@ -105,14 +105,62 @@ paths =
   Node* root = buildNode(L, -1);
   lua_pop(L, 1);
 
-  // Create the SDL window now that we know whether explicit size was provided.
+  
+  std::string windowTitle = "Vulpis window";
+  bool hasWindowSize = false;
+  bool windowResizable = false;
+
+  lua_getglobal(L, "Window");
+  bool hasWindowFunction = lua_isfunction(L, -1);
+  if (hasWindowFunction) {
+    if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+      std::cerr << "Error calling Window(): " << lua_tostring(L, -1) << std::endl;
+      lua_pop(L, 1);
+    } else {
+      if (lua_istable(L, -1)) {
+        lua_getfield(L, -1, "w");
+        bool hasW2 = lua_isnumber(L, -1);
+        if (hasW2) winW = (int)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, -1, "h");
+        bool hasH2 = lua_isnumber(L, -1);
+        if (hasH2) winH = (int)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        hasWindowSize = hasW2 && hasH2;
+
+        lua_getfield(L, -1, "title");
+        if (lua_isstring(L, -1)) windowTitle = lua_tostring(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, -1, "resizable");
+        if (lua_isboolean(L, -1)) windowResizable = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+      }
+      lua_pop(L, 1); 
+    }
+  } else {
+    lua_pop(L, 1); 
+  }
+
+  
+  hasExplicitSize = hasExplicitSize || hasWindowSize;
+
+  
   Uint32 windowFlags = SDL_WINDOW_SHOWN;
-  if (!hasExplicitSize) {
-    windowFlags |= SDL_WINDOW_MAXIMIZED | SDL_WINDOW_RESIZABLE;
+    if (!hasExplicitSize) {
+    windowFlags |= SDL_WINDOW_MAXIMIZED;
+    
+    if (windowResizable) windowFlags |= SDL_WINDOW_RESIZABLE;
+    if (!hasWindowFunction) windowFlags |= SDL_WINDOW_RESIZABLE; 
+  } else {
+    
+    if (windowResizable) windowFlags |= SDL_WINDOW_RESIZABLE;
   }
 
   window = SDL_CreateWindow(
-    "Vulpis window",
+    windowTitle.c_str(),
     SDL_WINDOWPOS_CENTERED,
     SDL_WINDOWPOS_CENTERED,
     winW,
