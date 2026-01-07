@@ -201,7 +201,7 @@ void resolveStyles(Node* n, int parentW, int parentH) {
 }
 
 void measure(Node* n) {
-  if (n->type == "vstack") {
+  if (n->type == "vbox") {
     int totalH = 0;
     int maxW = 0;
 
@@ -222,7 +222,7 @@ void measure(Node* n) {
     if (n->w == 0) n->w = maxW + n->paddingLeft + n->paddingRight;
     if (n->h == 0) n->h = totalH + n->paddingTop + n->paddingBottom;
   }
-  else if (n->type == "hstack") {
+  else if (n->type == "hbox") {
     int totalW = 0;
     int maxH = 0;
 
@@ -249,7 +249,7 @@ void layout(Node* n, int x, int y) {
   n->x = (float)x;
   n->y = (float)y;
 
-  if (n->type == "vstack") {
+  if (n->type == "vbox") {
     int cursor = y + n->paddingTop;
 
     for (Node* c : n->children) {
@@ -260,7 +260,7 @@ void layout(Node* n, int x, int y) {
       cursor += (int)c->h + n->spacing + c->marginTop + c->marginBottom;
     }
   }
-  else if (n->type == "hstack") {
+  else if (n->type == "hbox") {
     int cursor = x + n->paddingLeft; 
 
     for (Node* c : n->children) {

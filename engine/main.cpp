@@ -27,22 +27,7 @@ int main(int argc, char* argv[]) {
   int winW = 800;
   int winH = 600;
 
-  SDL_Window* window = SDL_CreateWindow(
-    "Vulpis window",
-    SDL_WINDOWPOS_CENTERED,
-    SDL_WINDOWPOS_CENTERED,
-    winW,
-    winH,
-    SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE
-  );
-
-  if (!window) {
-    std::cout << "Window Creation Failed: " << SDL_GetError() << std::endl;
-    SDL_Quit();
-    return 1;
-  }
-
-  OpenGLRenderer renderer(window);
+  SDL_Window* window = nullptr;
 
   // initializing lua
   lua_State* L = luaL_newstate();
@@ -79,6 +64,72 @@ paths =
     SDL_Quit();
     return 1;
   }
+
+  // Require a global Window() function from app.lua and use it for window configuration
+  lua_getglobal(L, "Window");
+  if (!lua_isfunction(L, -1)) {
+      std::cerr << "Error: app.lua must define a Window() function" << std::endl;
+      exit(1);
+  }
+
+  if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
+      std::cerr << "Error calling Window(): " << lua_tostring(L, -1) << std::endl;
+      exit(1);
+  }
+
+  if (!lua_istable(L, -1)) {
+      std::cerr << "Error: app.lua must define a Window() function" << std::endl;
+      exit(1);
+  }
+
+  std::string title = "Vulpis window";
+  std::string mode = "";
+  int w = 800;
+  int h = 600;
+
+  lua_getfield(L, -1, "title");
+  if (lua_isstring(L, -1)) title = lua_tostring(L, -1);
+  lua_pop(L, 1);
+
+  lua_getfield(L, -1, "mode");
+  if (lua_isstring(L, -1)) mode = lua_tostring(L, -1);
+  lua_pop(L, 1);
+
+  lua_getfield(L, -1, "w");
+  if (lua_isnumber(L, -1)) w = (int)lua_tointeger(L, -1);
+  lua_pop(L, 1);
+
+  lua_getfield(L, -1, "h");
+  if (lua_isnumber(L, -1)) h = (int)lua_tointeger(L, -1);
+  lua_pop(L, 1);
+
+  lua_pop(L, 1); // pop Window() return table
+
+  int windowFlags = SDL_WINDOW_OPENGL;
+  if (mode == "full") {
+    windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_MAXIMIZED;
+  } else if (mode == "whole screen") {
+    windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN_DESKTOP;
+  }
+
+  window = SDL_CreateWindow(
+    title.c_str(),
+    SDL_WINDOWPOS_CENTERED,
+    SDL_WINDOWPOS_CENTERED,
+    w,
+    h,
+    windowFlags
+  );
+
+  if (!window) {
+    std::cout << "Window Creation Failed: " << SDL_GetError() << std::endl;
+    SDL_Quit();
+    return 1;
+  }
+
+  SDL_GetWindowSize(window, &winW, &winH);
+
+  OpenGLRenderer renderer(window);
 
   lua_getglobal(L, "App");
   if (!lua_isfunction(L, -1)) {
