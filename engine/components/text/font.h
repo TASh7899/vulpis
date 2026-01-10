@@ -19,9 +19,13 @@ class Font {
 
     const Character& GetCharacter(char c) const;
     unsigned int GetTextureID() const { return textureID; }
+    unsigned int GetLineHeight() const { return lineHeight; }
+    unsigned int GetAscent() const { return ascent; }
 
   private:
     unsigned int textureID;
+    unsigned int lineHeight;
+    unsigned int ascent;
     std::map<char, Character> characters;
     void Load(const std::string& path, unsigned int size);
 };

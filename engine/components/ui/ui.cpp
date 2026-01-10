@@ -6,6 +6,7 @@
 #include <lauxlib.h>
 #include <lua.h>
 #include <string>
+#include <vector>
 #include "../color/color.h"
 #include "../vdom/vdom.h"
 #include "../text/font.h"
@@ -127,18 +128,42 @@ Node* buildNode(lua_State* L, int idx) {
         n->type = lua_tostring(L, -1);
     lua_pop(L, 1);
 
+    lua_getfield(L, idx, "text");
+    if (lua_isstring(L, -1)) {
+      n->text = lua_tostring(L, -1);
+    }
+    lua_pop(L, 1);
+
+    lua_getfield(L, idx, "font");
+    if (lua_isuserdata(L, -1)) {
+      Font** fontptr = (Font**) luaL_checkudata(L, -1, "FontMeta");
+      if (fontptr && *fontptr) {
+        n->font = *fontptr;
+      }
+    }
+    lua_pop(L, 1);
+
+    lua_getfield(L, idx, "color");
+    if (lua_istable(L, -1)) {
+      lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+
     lua_getfield(L, idx, "style");
     bool hasStyle = lua_istable(L, -1);
 
     auto getInt = [&](const char* key, int defaultVal) {
-        int val = defaultVal;
-        if (hasStyle) {
-            lua_getfield(L, -1, key);
-            if (lua_isnumber(L, -1))
-                val = lua_tointeger(L, -1);
-            lua_pop(L, 1);
-        }
-        return val;
+      int val = defaultVal;
+      if (hasStyle) {
+        lua_getfield(L, -1, key);
+        if (lua_isnumber(L, -1))
+          val = lua_tointeger(L, -1);
+        lua_pop(L, 1);
+      }
+      return val;
     };
 
     auto getFloat = [&](const char* key, float defaultVal) {
@@ -162,8 +187,8 @@ Node* buildNode(lua_State* L, int idx) {
     };
 
     if (hasStyle) {
-        n->widthStyle = getLength(L, "w");
-        n->heightStyle = getLength(L, "h");
+      n->widthStyle = getLength(L, "w");
+      n->heightStyle = getLength(L, "h");
     }
 
     n->spacing = getInt("gap", getInt("spacing", 0));
@@ -199,42 +224,42 @@ Node* buildNode(lua_State* L, int idx) {
     }
 
     if (hasStyle) {
-        lua_getfield(L, -1, "BGColor");
-        if (lua_isstring(L, -1)) {
-          const char* hex = lua_tostring(L, -1);
-          n->color = parseHexColor(hex);
-          n->hasBackground = true;
-        }
-        else if (lua_istable(L, -1)) {
-            lua_rawgeti(L, -1, 1); n->color.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-            lua_rawgeti(L, -1, 2); n->color.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-            lua_rawgeti(L, -1, 3); n->color.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-            lua_rawgeti(L, -1, 4); n->color.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_getfield(L, -1, "BGColor");
+      if (lua_isstring(L, -1)) {
+        const char* hex = lua_tostring(L, -1);
+        n->color = parseHexColor(hex);
+        n->hasBackground = true;
+      }
+      else if (lua_istable(L, -1)) {
+        lua_rawgeti(L, -1, 1); n->color.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 2); n->color.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 3); n->color.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 4); n->color.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
 
-            n->hasBackground = true;
-        }
-        lua_pop(L, 1);
+        n->hasBackground = true;
+      }
+      lua_pop(L, 1);
     }
 
     lua_pop(L, 1);
 
     lua_getfield(L, idx, "onClick");
     if (lua_isfunction(L, -1)) {
-        n->onClickRef = luaL_ref(L, LUA_REGISTRYINDEX);
+      n->onClickRef = luaL_ref(L, LUA_REGISTRYINDEX);
     } else {
-        lua_pop(L, 1);
+      lua_pop(L, 1);
     }
 
     VDOM::updateCallback(L, idx, "onClick", n->onClickRef);
     lua_getfield(L, idx, "children");
     if (lua_istable(L, -1)) {
-        lua_pushnil(L);
-        while (lua_next(L, -2) != 0) {
-            Node* child = buildNode(L, lua_gettop(L));
-            child->parent = n;
-            n->children.push_back(child);
-            lua_pop(L, 1);
-        }
+      lua_pushnil(L);
+      while (lua_next(L, -2) != 0) {
+        Node* child = buildNode(L, lua_gettop(L));
+        child->parent = n;
+        n->children.push_back(child);
+        lua_pop(L, 1);
+      }
     }
     lua_pop(L, 1);
 
@@ -242,25 +267,25 @@ Node* buildNode(lua_State* L, int idx) {
 }
 
 void resolveStyles(Node* n, int parentW, int parentH) {
-    if (!n) return;
+  if (!n) return;
 
-    if (n->widthStyle.value != 0) {
-        n->w = n->widthStyle.resolve((float)parentW);
-    }
+  if (n->widthStyle.value != 0) {
+    n->w = n->widthStyle.resolve((float)parentW);
+  }
 
-    if (n->heightStyle.value != 0) {
-        n->h = n->heightStyle.resolve((float)parentH);
-    }
+  if (n->heightStyle.value != 0) {
+    n->h = n->heightStyle.resolve((float)parentH);
+  }
 
-    int contentW = (int)n->w - (n->paddingLeft + n->paddingRight);
-    int contentH = (int)n->h - (n->paddingTop + n->paddingBottom);
-    
-    if (contentW < 0) contentW = 0;
-    if (contentH < 0) contentH = 0;
+  int contentW = (int)n->w - (n->paddingLeft + n->paddingRight);
+  int contentH = (int)n->h - (n->paddingTop + n->paddingBottom);
 
-    for (Node* c : n->children) {
-        resolveStyles(c, contentW, contentH);
-    }
+  if (contentW < 0) contentW = 0;
+  if (contentH < 0) contentH = 0;
+
+  for (Node* c : n->children) {
+    resolveStyles(c, contentW, contentH);
+  }
 }
 
 void measure(Node* n) {
@@ -339,9 +364,19 @@ void layout(Node* n, int x, int y) {
 void generateRenderCommands(Node *n, RenderCommandList &list) {
   if (n->hasBackground) {
     list.push(DrawRectCommand{
-      {n->x, n->y, n->w, n->h},
-      {n->color.r, n->color.g, n->color.b, n->color.a}
-    });
+        {n->x, n->y, n->w, n->h},
+        {n->color.r, n->color.g, n->color.b, n->color.a}
+        });
+  }
+
+  if (n->type == "text" && !n->computedLines.empty()) {
+    float cursorX = n->x + n->paddingLeft;
+    float cursorY = n->y + n->paddingTop + n->font->GetAscent();
+
+    for (const std::string& line : n->computedLines) {
+      list.push(DrawTextCommand{line, n->font, cursorX, cursorY, n->textColor});
+      cursorY += n->computedLineHeight;
+    }
   }
 
   if (n->overflowHidden) {
@@ -371,3 +406,93 @@ void freeTree(lua_State* L, Node* n) {
 
   delete n;
 }
+
+
+TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float maxWidth) {
+    TextLayoutResult result;
+    result.width = 0;
+    result.height = 0;
+
+    if (!font || text.empty()) return result;
+    if (maxWidth <= 0) maxWidth = 1;
+
+    float lineHeight = (float)font->GetLineHeight();
+    float currentX = 0.0f;
+    float currentY = lineHeight;
+
+    auto measureStr = [&](const std::string& str) -> float {
+        float w = 0;
+        for (char c : str) w += (font->GetCharacter(c).Advance >> 6);
+        return w;
+    };
+
+    std::string currentLine;
+    float currentLineWidth = 0.0f;
+    std::string word;
+
+    for (size_t i = 0; i <= text.size(); i++) {
+        char c = (i < text.size()) ? text[i] : 0;
+
+        if (c == ' ' || c == '\n' || c == 0) {
+            float wordW = measureStr(word);
+            float spaceW = (c == ' ') ? measureStr(" ") : 0;
+
+            if (currentLineWidth + wordW <= maxWidth) {
+                currentLine += word;
+                currentLineWidth += wordW;
+            } else {
+                result.lines.push_back(currentLine);
+                result.width = std::max(result.width, currentLineWidth); // Track max width
+                currentLine = word;
+                currentLineWidth = wordW;
+                currentY += lineHeight;
+            }
+
+            if (c == ' ') {
+                currentLine += ' ';
+                currentLineWidth += spaceW;
+            } else if (c == '\n') {
+                result.lines.push_back(currentLine);
+                result.width = std::max(result.width, currentLineWidth);
+                currentLine = "";
+                currentLineWidth = 0;
+                currentY += lineHeight;
+            }
+            word.clear();
+        } else {
+            word += c;
+        }
+    }
+    if (!currentLine.empty()) {
+        result.lines.push_back(currentLine);
+        result.width = std::max(result.width, currentLineWidth);
+    }
+    
+    result.height = currentY;
+    return result;
+}
+
+
+void computeTextLayout(Node* n) {
+    if (n->type != "text" || !n->font || n->text.empty()) {
+        n->computedLines.clear();
+        return;
+    }
+
+    float maxWidth = n->w - (n->paddingLeft + n->paddingRight);
+
+    TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
+
+    n->computedLines = res.lines;
+    n->computedLineHeight = (float)n->font->GetLineHeight();
+}
+
+void updateTextLayout(Node* root) {
+  if (!root) return;
+  computeTextLayout(root);
+  for (Node* c : root->children) {
+    updateTextLayout(c);
+  }
+}
+
+

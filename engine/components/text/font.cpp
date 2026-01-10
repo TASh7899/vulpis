@@ -28,6 +28,8 @@ void Font::Load(const std::string& path, unsigned int size) {
   }
 
   FT_Set_Pixel_Sizes(face, 0, size);
+  this->lineHeight = face->size->metrics.height >> 6;
+  this->ascent = face->size->metrics.ascender >> 6;
 
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 

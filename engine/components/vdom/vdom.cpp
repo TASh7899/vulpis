@@ -3,6 +3,7 @@
 #include <lua.h>
 #include <string>
 #include <vector>
+#include "../text/font.h"
 
 namespace VDOM {
 
@@ -13,6 +14,10 @@ namespace VDOM {
 
   bool operator!=(const SDL_Color& a, const SDL_Color b) {
     return a.a != b.a || a.r != b.r || a.g != b.g || a.b != b.b;
+  }
+
+  bool operator!=(const Color& a, const Color& b) {
+      return a.a != b.a || a.r != b.r || a.g != b.g || a.b != b.b;
   }
 
   template <typename T> 
@@ -74,14 +79,60 @@ namespace VDOM {
   }
 
   void patchNode(lua_State* L, Node* n, int idx) {
+    bool layoutChanged = false;
+    bool paintChanged = false;
+
+    lua_getfield(L, idx, "text");
+    if (lua_isstring(L, -1)) {
+      std::string newText = lua_tostring(L, -1);
+      if (n->text != newText) {
+        n->text = newText;
+        n->computedLines.clear();
+        layoutChanged = true;
+      }
+    }
+    lua_pop(L, 1);
+
+    lua_getfield(L, idx, "font");
+    if (lua_isuserdata(L, -1)) {
+      Font** fontPtr = (Font**)luaL_checkudata(L, -1, "FontMeta");
+      if (fontPtr && *fontPtr && n->font != *fontPtr) {
+        n->font = *fontPtr;
+        n->computedLines.clear(); // Font metrics changed
+        layoutChanged = true;
+      }
+    }
+    lua_pop(L, 1);
+
+    lua_getfield(L, idx, "color");
+    if (!lua_isnil(L, -1)) {
+      Color newTextColor = n->textColor;
+
+      if (lua_isstring(L, -1)) {
+        SDL_Color sc = parseHexColor(lua_tostring(L, -1));
+        newTextColor = {sc.r, sc.g, sc.b, sc.a};
+      } 
+      else if (lua_istable(L, -1)) {
+        lua_rawgeti(L, -1, 1); int r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 2); int g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 3); int b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 4); int a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        newTextColor = {(Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a};
+      }
+
+      if (n->textColor != newTextColor) {
+        n->textColor = newTextColor;
+        paintChanged = true;
+      }
+    }
+    lua_pop(L, 1);
+
     lua_getfield(L, idx, "style");
     if (!lua_istable(L, -1)) {
       lua_pop(L, 1);
       lua_newtable(L);
     }
 
-    bool layoutChanged = false;
-    bool paintChanged = false;
 
     // comparing % w and h 
     update(n->widthStyle, getLength(L, "w"), layoutChanged);
@@ -157,7 +208,7 @@ namespace VDOM {
     std::vector<bool> reused(current->children.size(), false);
     std::vector<Node*> newChildren;
     newChildren.reserve(luaCount);
-    
+
     for (int i = 0; i < luaCount; ++i) {
       lua_rawgeti(L, childrenIdx, i+1);
       int childIdx = lua_gettop(L);

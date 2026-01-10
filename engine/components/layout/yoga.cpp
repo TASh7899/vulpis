@@ -1,11 +1,43 @@
 #include "layout.h"
+#include "yoga/YGConfig.h"
 #include "yoga/YGNode.h"
 #include "yoga/YGNodeLayout.h"
 #include "yoga/YGNodeStyle.h"
+#include <algorithm>
+#include <cmath>
 #include <yoga/Yoga.h>
 #include <vector>
+#include "../ui/ui.h"
 
 namespace Layout {
+
+  YGSize textMeasure(YGNodeConstRef node, float width, YGMeasureMode widthMode, float height, YGMeasureMode heightMode) {
+    Node* n = (Node*)YGNodeGetContext(node);
+    YGSize size = {0, 0};
+    if (!n || !n->font || n->text.empty()) {
+      return size;
+    }
+
+    float maxWidth = 999999.0f;
+    if (widthMode == YGMeasureModeExactly) {
+      maxWidth = width;
+    } else if (widthMode == YGMeasureModeAtMost) {
+      maxWidth = width;
+    }
+
+    TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
+
+    size.width = std::ceil(res.width);
+    size.height = std::ceil(res.height);
+
+    if (heightMode == YGMeasureModeExactly) {
+      size.height = height;
+    } else if (heightMode == YGMeasureModeAtMost) {
+      size.height = std::min(height, size.height);
+    }
+
+    return size;
+  }
 
   class YogaSolver : public LayoutSolver {
     public:
@@ -23,6 +55,12 @@ namespace Layout {
     private:
       YGNodeRef buildTree(Node* n) {
         YGNodeRef yogaNode = YGNodeNew();
+        YGNodeSetContext(yogaNode, n);
+
+        if (n->type == "text") {
+          YGNodeSetMeasureFunc(yogaNode, textMeasure);
+        }
+
         if (n->type == "vbox") {
           YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionColumn);
         } else if (n->type == "hbox") {

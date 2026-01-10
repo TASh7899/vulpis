@@ -13,7 +13,6 @@
 #include "components/state/state.h"
 #include "components/input/input.h"
 #include "components/vdom/vdom.h"
-#include "components/text/font.h"
 
 
 int main(int argc, char* argv[]) {
@@ -172,6 +171,7 @@ paths =
 
   Layout::LayoutSolver* solver = Layout::createYogaSolver();
   solver->solve(root, {winW, winH});
+  updateTextLayout(root);
   root->isLayoutDirty = false;
   root->isPaintDirty = false;
 
@@ -216,6 +216,7 @@ paths =
 
     if (root->isLayoutDirty) {
       solver->solve(root, {winW, winH});
+      updateTextLayout(root);
       root->isLayoutDirty = false;
     }
 

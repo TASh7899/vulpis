@@ -3,6 +3,7 @@
 #include <vector>
 #include <SDL2/SDL.h>
 #include "../renderer/commands.h"
+#include "../text/font.h"
 
 enum UnitType {
   PIXEL,
@@ -61,6 +62,12 @@ struct Node {
   std::string key;
   std::vector<Node*> children;
 
+  std::string text;
+  Font* font = nullptr;
+  Color textColor = {255, 255, 255, 255};
+
+  std::vector<std::string> computedLines;
+  float computedLineHeight = 0.0f;
 
   float x = 0, y = 0;
   float w = 0, h = 0;
@@ -110,6 +117,16 @@ struct Node {
 };
 
 
+struct TextLayoutResult {
+  std::vector<std::string> lines;
+  float width;
+  float height;
+};
+
+TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float maxWidth);
+
+
+
 Node* buildNode(lua_State* L, int idx);
 void generateRenderCommands(Node* n, RenderCommandList& list);
 void freeTree(lua_State* L, Node* n);
@@ -121,4 +138,4 @@ Justify parseJustify(std::string s);
 
 void UI_RegisterLuaFunctions(lua_State* L);
 void UI_SetRenderCommandList(RenderCommandList* list);
-
+void updateTextLayout(Node* root);
