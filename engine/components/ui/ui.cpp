@@ -134,24 +134,6 @@ Node* buildNode(lua_State* L, int idx) {
     }
     lua_pop(L, 1);
 
-    lua_getfield(L, idx, "font");
-    if (lua_isuserdata(L, -1)) {
-      Font** fontptr = (Font**) luaL_checkudata(L, -1, "FontMeta");
-      if (fontptr && *fontptr) {
-        n->font = *fontptr;
-      }
-    }
-    lua_pop(L, 1);
-
-    lua_getfield(L, idx, "color");
-    if (lua_istable(L, -1)) {
-      lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-      lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-      lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-      lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-    }
-    lua_pop(L, 1);
-
     lua_getfield(L, idx, "style");
     bool hasStyle = lua_istable(L, -1);
 
@@ -187,6 +169,30 @@ Node* buildNode(lua_State* L, int idx) {
     };
 
     if (hasStyle) {
+      if (n->type == "text") {
+        lua_getfield(L, -1, "font");
+        if (lua_isuserdata(L, -1)) {
+          Font** fontptr = (Font**) luaL_checkudata(L, -1, "FontMeta");
+          if (fontptr && *fontptr) {
+            n->font = *fontptr;
+          }
+        }
+        lua_pop(L, 1);
+        lua_getfield(L, -1, "color");
+        if (lua_isstring(L, -1)) {
+          const char* hex = lua_tostring(L, -1);
+          SDL_Color sc = parseHexColor(hex);
+          n->textColor = {(uint8_t)sc.r, (uint8_t)sc.g, (uint8_t)sc.b, (uint8_t)sc.a};
+        }
+        else if (lua_istable(L, -1)) {
+          lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+          lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+          lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+          lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        }
+        lua_pop(L, 1);
+      }
+
       n->widthStyle = getLength(L, "w");
       n->heightStyle = getLength(L, "h");
     }
@@ -213,6 +219,7 @@ Node* buildNode(lua_State* L, int idx) {
     n->maxWidth = getInt("maxWidth", 99999);
 
     n->flexGrow = getFloat("flexGrow", 0.0f);
+    n->flexShrink  = getFloat("flexShrink", 0.0f);
     n->alignItems = parseAlign(getString("alignItems", "start"));
     n->justifyContent = parseJustify(getString("justifyContent", "start"));
 
@@ -409,82 +416,82 @@ void freeTree(lua_State* L, Node* n) {
 
 
 TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float maxWidth) {
-    TextLayoutResult result;
-    result.width = 0;
-    result.height = 0;
+  TextLayoutResult result;
+  result.width = 0;
+  result.height = 0;
 
-    if (!font || text.empty()) return result;
-    if (maxWidth <= 0) maxWidth = 1;
+  if (!font || text.empty()) return result;
+  if (maxWidth <= 0) maxWidth = 1;
 
-    float lineHeight = (float)font->GetLineHeight();
-    float currentX = 0.0f;
-    float currentY = lineHeight;
+  float lineHeight = (float)font->GetLineHeight();
+  float currentX = 0.0f;
+  float currentY = lineHeight;
 
-    auto measureStr = [&](const std::string& str) -> float {
-        float w = 0;
-        for (char c : str) w += (font->GetCharacter(c).Advance >> 6);
-        return w;
-    };
+  auto measureStr = [&](const std::string& str) -> float {
+    float w = 0;
+    for (char c : str) w += (font->GetCharacter(c).Advance >> 6);
+    return w;
+  };
 
-    std::string currentLine;
-    float currentLineWidth = 0.0f;
-    std::string word;
+  std::string currentLine;
+  float currentLineWidth = 0.0f;
+  std::string word;
 
-    for (size_t i = 0; i <= text.size(); i++) {
-        char c = (i < text.size()) ? text[i] : 0;
+  for (size_t i = 0; i <= text.size(); i++) {
+    char c = (i < text.size()) ? text[i] : 0;
 
-        if (c == ' ' || c == '\n' || c == 0) {
-            float wordW = measureStr(word);
-            float spaceW = (c == ' ') ? measureStr(" ") : 0;
+    if (c == ' ' || c == '\n' || c == 0) {
+      float wordW = measureStr(word);
+      float spaceW = (c == ' ') ? measureStr(" ") : 0;
 
-            if (currentLineWidth + wordW <= maxWidth) {
-                currentLine += word;
-                currentLineWidth += wordW;
-            } else {
-                result.lines.push_back(currentLine);
-                result.width = std::max(result.width, currentLineWidth); // Track max width
-                currentLine = word;
-                currentLineWidth = wordW;
-                currentY += lineHeight;
-            }
+      if (currentLineWidth + wordW <= maxWidth) {
+        currentLine += word;
+        currentLineWidth += wordW;
+      } else {
+        result.lines.push_back(currentLine);
+        result.width = std::max(result.width, currentLineWidth); // Track max width
+        currentLine = word;
+        currentLineWidth = wordW;
+        currentY += lineHeight;
+      }
 
-            if (c == ' ') {
-                currentLine += ' ';
-                currentLineWidth += spaceW;
-            } else if (c == '\n') {
-                result.lines.push_back(currentLine);
-                result.width = std::max(result.width, currentLineWidth);
-                currentLine = "";
-                currentLineWidth = 0;
-                currentY += lineHeight;
-            }
-            word.clear();
-        } else {
-            word += c;
-        }
-    }
-    if (!currentLine.empty()) {
+      if (c == ' ') {
+        currentLine += ' ';
+        currentLineWidth += spaceW;
+      } else if (c == '\n') {
         result.lines.push_back(currentLine);
         result.width = std::max(result.width, currentLineWidth);
+        currentLine = "";
+        currentLineWidth = 0;
+        currentY += lineHeight;
+      }
+      word.clear();
+    } else {
+      word += c;
     }
-    
-    result.height = currentY;
-    return result;
+  }
+  if (!currentLine.empty()) {
+    result.lines.push_back(currentLine);
+    result.width = std::max(result.width, currentLineWidth);
+  }
+
+  result.height = currentY;
+  return result;
 }
 
 
 void computeTextLayout(Node* n) {
-    if (n->type != "text" || !n->font || n->text.empty()) {
-        n->computedLines.clear();
-        return;
-    }
+  if (n->type != "text" || !n->font || n->text.empty()) {
+    n->computedLines.clear();
+    return;
+  }
 
-    float maxWidth = n->w - (n->paddingLeft + n->paddingRight);
+  float maxWidth = n->w - (n->paddingLeft + n->paddingRight);
 
-    TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
+  TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
 
-    n->computedLines = res.lines;
-    n->computedLineHeight = (float)n->font->GetLineHeight();
+  n->computedLines = res.lines;
+  n->computedLineHeight = (float)n->font->GetLineHeight();
 }
 
 void updateTextLayout(Node* root) {

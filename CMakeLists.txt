@@ -57,3 +57,13 @@ target_link_libraries(vulpis PRIVATE
   ${FREETYPE_LIBRARIES}
 )
 
+add_custom_command(TARGET vulpis POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/src/assets
+    ${CMAKE_BINARY_DIR}/src/assets
+  COMMENT "Copying assets to build directory.."
+)
+
+
+
+

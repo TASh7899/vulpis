@@ -59,6 +59,8 @@ namespace Layout {
 
         if (n->type == "text") {
           YGNodeSetMeasureFunc(yogaNode, textMeasure);
+          YGNodeStyleSetFlexShrink(yogaNode, 0.0f);
+          YGNodeStyleSetFlexGrow(yogaNode, 0.0f);
         }
 
         if (n->type == "vbox") {
@@ -69,6 +71,10 @@ namespace Layout {
 
         if (n->flexGrow > 0) {
           YGNodeStyleSetFlexGrow(yogaNode, n->flexGrow);
+        }
+
+        if (n->flexShrink >= 0) {
+          YGNodeStyleSetFlexShrink(yogaNode, n->flexShrink);
         }
 
         if (n->widthStyle.type == PERCENT) {

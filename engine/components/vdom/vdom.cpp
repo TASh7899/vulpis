@@ -93,39 +93,6 @@ namespace VDOM {
     }
     lua_pop(L, 1);
 
-    lua_getfield(L, idx, "font");
-    if (lua_isuserdata(L, -1)) {
-      Font** fontPtr = (Font**)luaL_checkudata(L, -1, "FontMeta");
-      if (fontPtr && *fontPtr && n->font != *fontPtr) {
-        n->font = *fontPtr;
-        n->computedLines.clear(); // Font metrics changed
-        layoutChanged = true;
-      }
-    }
-    lua_pop(L, 1);
-
-    lua_getfield(L, idx, "color");
-    if (!lua_isnil(L, -1)) {
-      Color newTextColor = n->textColor;
-
-      if (lua_isstring(L, -1)) {
-        SDL_Color sc = parseHexColor(lua_tostring(L, -1));
-        newTextColor = {sc.r, sc.g, sc.b, sc.a};
-      } 
-      else if (lua_istable(L, -1)) {
-        lua_rawgeti(L, -1, 1); int r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 2); int g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 3); int b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 4); int a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        newTextColor = {(Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a};
-      }
-
-      if (n->textColor != newTextColor) {
-        n->textColor = newTextColor;
-        paintChanged = true;
-      }
-    }
-    lua_pop(L, 1);
 
     lua_getfield(L, idx, "style");
     if (!lua_istable(L, -1)) {
@@ -133,6 +100,41 @@ namespace VDOM {
       lua_newtable(L);
     }
 
+    if (n->type == "text") {
+      lua_getfield(L, idx, "font");
+      if (lua_isuserdata(L, -1)) {
+        Font** fontPtr = (Font**)luaL_checkudata(L, -1, "FontMeta");
+        if (fontPtr && *fontPtr && n->font != *fontPtr) {
+          n->font = *fontPtr;
+          n->computedLines.clear(); // Font metrics changed
+          layoutChanged = true;
+        }
+      }
+      lua_pop(L, 1);
+
+      lua_getfield(L, idx, "color");
+      if (!lua_isnil(L, -1)) {
+        Color newTextColor = n->textColor;
+
+        if (lua_isstring(L, -1)) {
+          SDL_Color sc = parseHexColor(lua_tostring(L, -1));
+          newTextColor = {sc.r, sc.g, sc.b, sc.a};
+        } 
+        else if (lua_istable(L, -1)) {
+          lua_rawgeti(L, -1, 1); int r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+          lua_rawgeti(L, -1, 2); int g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+          lua_rawgeti(L, -1, 3); int b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+          lua_rawgeti(L, -1, 4); int a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+          newTextColor = {(Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a};
+        }
+
+        if (n->textColor != newTextColor) {
+          n->textColor = newTextColor;
+          paintChanged = true;
+        }
+      }
+      lua_pop(L, 1);
+    }
 
     // comparing % w and h 
     update(n->widthStyle, getLength(L, "w"), layoutChanged);
@@ -146,6 +148,7 @@ namespace VDOM {
 
     // flexbox - alignItems - justifyContent
     update(n->flexGrow, getFloatProp(L, "flexGrow", 0.0f), layoutChanged);
+    update(n->flexShrink, getFloatProp(L, "flexShrink", 0.0f), layoutChanged);
     update(n->alignItems, parseAlign(getStringProp(L, "alignItems", "start")), layoutChanged);
     update(n->justifyContent, parseJustify(getStringProp(L, "justifyContent", "start")), layoutChanged);
 
