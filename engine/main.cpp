@@ -4,6 +4,7 @@
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_video.h>
 #include <iostream>
+#include <ostream>
 #include <string>
 
 #include "components/renderer/commands.h"
@@ -69,22 +70,11 @@ paths =
     return 1;
   }
 
-  // Require a global Window() function from app.lua and use it for window configuration
-  lua_getglobal(L, "Window");
-  if (!lua_isfunction(L, -1)) {
-      std::cerr << "Error: app.lua must define a Window() function" << std::endl;
-      exit(1);
-  }
 
-  if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
-      std::cerr << "Error calling Window(): " << lua_tostring(L, -1) << std::endl;
-      exit(1);
-  }
-
-  if (!lua_istable(L, -1)) {
-      std::cerr << "Error: app.lua must define a Window() function" << std::endl;
-      exit(1);
-  }
+//          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+//          ╏                    [WINDOW SECTION]                     ╏
+//          ╏               WINDOW CONFIG AND CREATION                ╏
+//          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
 
   std::string title = "Vulpis window";
   std::string mode = "";
@@ -92,29 +82,50 @@ paths =
   int h = 600;
   bool resizable = false;
 
-  lua_getfield(L, -1, "title");
-  if (lua_isstring(L, -1)) title = lua_tostring(L, -1);
-  lua_pop(L, 1);
+  lua_getglobal(L, "Window");
+  if (lua_isfunction(L, -1)) {
 
-  lua_getfield(L, -1, "mode");
-  if (lua_isstring(L, -1)) mode = lua_tostring(L, -1);
-  lua_pop(L, 1);
+    if (lua_pcall(L, 0, 1, 0) == LUA_OK) {
 
-  lua_getfield(L, -1, "w");
+      if (lua_istable(L, -1)) {
+        lua_getfield(L, -1, "title");
 
-  if (lua_isnumber(L, -1)) w = (int)lua_tointeger(L, -1);;
-  lua_pop(L, 1);
+        if (lua_isstring(L, -1)) title = lua_tostring(L, -1);
+        lua_pop(L, 1);
 
-  lua_getfield(L, -1, "h");
-  if (lua_isnumber(L, -1)) h = (int)lua_tointeger(L, -1);
-  lua_pop(L, 1);
+        lua_getfield(L, -1, "mode");
+        if (lua_isstring(L, -1)) mode = lua_tostring(L, -1);
+        lua_pop(L, 1);
 
-  lua_getfield(L, -1, "resizable");
-  if (lua_isboolean(L, -1)) resizable = lua_toboolean(L, -1);
-  lua_pop(L, 1);
+        lua_getfield(L, -1, "w");
 
-  lua_pop(L, 1); // pop Window() return table
+        if (lua_isnumber(L, -1)) w = (int)lua_tointeger(L, -1);;
+        lua_pop(L, 1);
 
+        lua_getfield(L, -1, "h");
+        if (lua_isnumber(L, -1)) h = (int)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+
+        lua_getfield(L, -1, "resizable");
+        if (lua_isboolean(L, -1)) resizable = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+
+      } else {
+        std::cerr << "WARNING: Window() did not return a table, using default values" << std::endl;
+      }
+    } else {
+      std::cerr << "ERROR: Window() execution failed: "<< lua_tostring(L, -1) << std::endl;
+      std::cerr << lua_tostring(L, -1) << std::endl;
+      std::cerr << "Reverting to default window settings" << std::endl;
+    }
+  } else {
+    std::cerr << "WARNING: Window() not declared, using default settings" << std::endl;
+  }
+lua_pop(L, 1);
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ WINDOW FLAGS ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   int windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
 
   if (resizable) {
@@ -142,11 +153,25 @@ paths =
     SDL_Quit();
     return 1;
   }
-
   SDL_GetWindowSize(window, &winW, &winH);
 
+//          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+//          ╏                  END OF WINDOW SECTION                  ╏
+//          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+
+
+
+
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ INITIALIZING RENDERER ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   OpenGLRenderer renderer(window);
 
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ HANDLING APP FUNCTION ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   lua_getglobal(L, "App");
   if (!lua_isfunction(L, -1)) {
       std::cerr << "Error: Global 'App' function not found in app.lua" << std::endl;
@@ -170,6 +195,10 @@ paths =
   Node* root = buildNode(L, -1);
   lua_pop(L, 1);
 
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ LAYOUT SOLVER CREATION ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   Layout::LayoutSolver* solver = Layout::createYogaSolver();
   solver->solve(root, {winW, winH});
   updateTextLayout(root);
@@ -179,7 +208,13 @@ paths =
   bool running = true;
   SDL_Event event;
 
+
+
+//          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+//          ╏                    MAIN PROGRAM LOOP                    ╏
+//          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   while (running) {
+    // HANDLING SDL EVENTS
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) {
         running = false;
@@ -194,6 +229,9 @@ paths =
       }
     }
 
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ RECONCILE TREE IF DIRTY ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
     if (StateManager::instance().isDirty()) {
       lua_getglobal(L, "App");
       if (!lua_isfunction(L, -1)) {
@@ -226,6 +264,9 @@ paths =
     generateRenderCommands(root, cmdList);
     UI_SetRenderCommandList(&cmdList);
 
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ on_render() FUNCTION ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
     lua_getglobal(L, "on_render");
     if (lua_isfunction(L, -1)) {
       if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
