@@ -111,15 +111,25 @@ namespace Layout {
           YGNodeStyleSetGap(yogaNode, YGGutterAll, (float)n->spacing);
         }
 
-        for (size_t i = 0; i < n->children.size(); i++) {
-          YGNodeRef childYoga = buildTree(n->children[i]);
-          YGNodeInsertChild(yogaNode, childYoga, i);
+        if (n->type == "text" && !n->children.empty()) {
+          std::cerr << "ERROR: Text Node (text='" 
+            << n->text.substr(0, 20) << (n->text.length() > 20 ? "..." : "") 
+            << "') cannot have children.\n";
+            exit(1);
+        } else {
+          for (size_t i = 0; i < n->children.size(); i++) {
+            YGNodeRef childYoga = buildTree(n->children[i]);
+            YGNodeInsertChild(yogaNode, childYoga, i);
+          }
         }
 
         return yogaNode;
       }
 
       void applyLayout(Node* n, YGNodeRef yogaNode, float parentX, float parentY) {
+
+        if (!n || !yogaNode) return;
+
         float relX = YGNodeLayoutGetLeft(yogaNode);
         float relY = YGNodeLayoutGetTop(yogaNode);
 
@@ -127,6 +137,7 @@ namespace Layout {
         n->y = parentY + relY;
         n->w = YGNodeLayoutGetWidth(yogaNode);
         n->h = YGNodeLayoutGetHeight(yogaNode);
+
 
         for (size_t i = 0; i < n->children.size(); i++) {
           YGNodeRef childNode = YGNodeGetChild(yogaNode, i);

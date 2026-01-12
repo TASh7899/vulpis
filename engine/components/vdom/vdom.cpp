@@ -17,7 +17,7 @@ namespace VDOM {
   }
 
   bool operator!=(const Color& a, const Color& b) {
-      return a.a != b.a || a.r != b.r || a.g != b.g || a.b != b.b;
+    return a.a != b.a || a.r != b.r || a.g != b.g || a.b != b.b;
   }
 
   template <typename T> 
@@ -112,6 +112,24 @@ namespace VDOM {
       }
       lua_pop(L, 1);
 
+      lua_getfield(L, idx, "fontSize");
+      if (lua_isnumber(L, -1)) {
+        int newSize = (int)lua_tointeger(L, -1);
+
+        // If the size changed, we need to request a new font handle from the cache
+        if (n->font && newSize > 0 && (int)n->font->GetSize() != newSize) {
+          auto [id, fontPtr] = UI_LoadFont(n->font->GetPath(), newSize);
+
+          if (n->font != fontPtr) {
+            n->font = fontPtr;
+            n->fontId = id;
+            n->computedLines.clear(); // Text needs re-measuring
+            layoutChanged = true;
+          }
+        }
+      }
+      lua_pop(L, 1);
+
       lua_getfield(L, idx, "color");
       if (!lua_isnil(L, -1)) {
         Color newTextColor = n->textColor;
@@ -150,6 +168,8 @@ namespace VDOM {
     update(n->flexGrow, getFloatProp(L, "flexGrow", 0.0f), layoutChanged);
     update(n->flexShrink, getFloatProp(L, "flexShrink", 0.0f), layoutChanged);
     update(n->alignItems, parseAlign(getStringProp(L, "alignItems", "start")), layoutChanged);
+    update(n->textAlign, parseTextAlign(getStringProp(L, "textAlign", "left")), layoutChanged);
+
     update(n->justifyContent, parseJustify(getStringProp(L, "justifyContent", "start")), layoutChanged);
 
     // we have support for both gap and spacing

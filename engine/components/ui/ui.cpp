@@ -13,6 +13,7 @@
 #include "../text/font.h"
 
 // global pointer for immediate mode
+RenderCommandList* activeCommandList = nullptr;
 
 void UI_SetRenderCommandList(RenderCommandList* list) {
   activeCommandList = list;
@@ -70,163 +71,183 @@ Length getLength(lua_State* L, const char* key) {
     return len;
 }
 
-
+TextAlign parseTextAlign(std::string s) {
+  if (s == "center") return TextAlign::Center;
+  if (s == "right") return TextAlign::Right;
+  if (s == "left") return TextAlign::Left;
+  return TextAlign::Left;
+}
 
 Node* buildNode(lua_State* L, int idx) {
-    luaL_checktype(L, idx, LUA_TTABLE);
+  luaL_checktype(L, idx, LUA_TTABLE);
 
-    Node* n = new Node();
+  Node* n = new Node();
 
-    lua_getfield(L, idx, "type");
-    if (lua_isstring(L, -1))
-        n->type = lua_tostring(L, -1);
-    lua_pop(L, 1);
+  lua_getfield(L, idx, "type");
+  if (lua_isstring(L, -1))
+    n->type = lua_tostring(L, -1);
+  lua_pop(L, 1);
 
-    lua_getfield(L, idx, "text");
-    if (lua_isstring(L, -1)) {
-      n->text = lua_tostring(L, -1);
-    }
-    lua_pop(L, 1);
+  lua_getfield(L, idx, "text");
+  if (lua_isstring(L, -1)) {
+    n->text = lua_tostring(L, -1);
+  }
+  lua_pop(L, 1);
 
-    lua_getfield(L, idx, "style");
-    bool hasStyle = lua_istable(L, -1);
+  lua_getfield(L, idx, "style");
+  bool hasStyle = lua_istable(L, -1);
 
-    auto getInt = [&](const char* key, int defaultVal) {
-      int val = defaultVal;
-      if (hasStyle) {
-        lua_getfield(L, -1, key);
-        if (lua_isnumber(L, -1))
-          val = lua_tointeger(L, -1);
-        lua_pop(L, 1);
-      }
-      return val;
-    };
-
-    auto getFloat = [&](const char* key, float defaultVal) {
-      float val = defaultVal;
-      if (hasStyle) {
-        lua_getfield(L, -1, key);
-        if (lua_isnumber(L, -1)) val = (float)lua_tonumber(L, -1);
-        lua_pop(L, 1);
-      }
-      return val;
-    };
-
-    auto getString = [&](const char* key, std::string defaultVal) {
-      std::string val = defaultVal;
-      if (hasStyle) {
-        lua_getfield(L, -1, key);
-        if (lua_isstring(L, -1)) val = lua_tostring(L, -1);
-        lua_pop(L, 1);
-      }
-      return val;
-    };
-
+  auto getInt = [&](const char* key, int defaultVal) {
+    int val = defaultVal;
     if (hasStyle) {
-      if (n->type == "text") {
-        lua_getfield(L, -1, "font");
-        if (lua_isuserdata(L, -1)) {
-          FontHandle* h = (FontHandle*)luaL_checkudata(L, -1, "FontMeta");
-          if (h) {
-            n->fontId = h->id;
-            n->font = UI_GetFontById(h->id);
-
-          }
-        }
-        lua_pop(L, 1);
-        lua_getfield(L, -1, "color");
-        if (lua_isstring(L, -1)) {
-          const char* hex = lua_tostring(L, -1);
-          SDL_Color sc = parseHexColor(hex);
-          n->textColor = {(uint8_t)sc.r, (uint8_t)sc.g, (uint8_t)sc.b, (uint8_t)sc.a};
-        }
-        else if (lua_istable(L, -1)) {
-          lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-          lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-          lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-          lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        }
-        lua_pop(L, 1);
-      }
-
-      n->widthStyle = getLength(L, "w");
-      n->heightStyle = getLength(L, "h");
+      lua_getfield(L, -1, key);
+      if (lua_isnumber(L, -1))
+        val = lua_tointeger(L, -1);
+      lua_pop(L, 1);
     }
+    return val;
+  };
 
-    n->spacing = getInt("gap", getInt("spacing", 0));
-
-    int p = getInt("padding", 0);
-    n->padding       = p;
-    n->paddingTop    = getInt("paddingTop", p);
-    n->paddingBottom = getInt("paddingBottom", p);
-    n->paddingLeft   = getInt("paddingLeft", p);
-    n->paddingRight  = getInt("paddingRight", p);
-
-    int m = getInt("margin", 0);
-    n->margin       = m;
-    n->marginTop    = getInt("marginTop", m);
-    n->marginBottom = getInt("marginBottom", m);
-    n->marginLeft   = getInt("marginLeft", m);
-    n->marginRight  = getInt("marginRight", m);
-
-    n->minHeight = getInt("minHeight", 0);
-    n->maxHeight = getInt("maxHeight", 99999);
-    n->minWidth = getInt("minWidth", 0);
-    n->maxWidth = getInt("maxWidth", 99999);
-
-    n->flexGrow = getFloat("flexGrow", 0.0f);
-    n->flexShrink  = getFloat("flexShrink", 0.0f);
-    n->alignItems = parseAlign(getString("alignItems", "start"));
-    n->justifyContent = parseJustify(getString("justifyContent", "start"));
-
-    std::string overflow = getString("overflow", "hidden");
-    if (overflow == "visible") {
-      n->overflowHidden = false;
-    } else {
-      n->overflowHidden = true;
-    }
-
+  auto getFloat = [&](const char* key, float defaultVal) {
+    float val = defaultVal;
     if (hasStyle) {
-      lua_getfield(L, -1, "BGColor");
+      lua_getfield(L, -1, key);
+      if (lua_isnumber(L, -1)) val = (float)lua_tonumber(L, -1);
+      lua_pop(L, 1);
+    }
+    return val;
+  };
+
+  auto getString = [&](const char* key, std::string defaultVal) {
+    std::string val = defaultVal;
+    if (hasStyle) {
+      lua_getfield(L, -1, key);
+      if (lua_isstring(L, -1)) val = lua_tostring(L, -1);
+      lua_pop(L, 1);
+    }
+    return val;
+  };
+
+  if (hasStyle) {
+    if (n->type == "text") {
+      lua_getfield(L, -1, "font");
+      if (lua_isuserdata(L, -1)) {
+        FontHandle* h = (FontHandle*)luaL_checkudata(L, -1, "FontMeta");
+        if (h) {
+          n->fontId = h->id;
+          n->font = UI_GetFontById(h->id);
+
+        }
+      }
+      lua_pop(L, 1);
+
+      lua_getfield(L, -1, "fontSize");
+      if (lua_isnumber(L, -1)) {
+        int newSize = (int)lua_tointeger(L, -1);
+        if (n->font && newSize > 0) {
+          auto [id, fontptr] = UI_LoadFont(n->font->GetPath(), newSize);
+          n->font = fontptr;
+          n->fontId = id;
+        }
+      }
+      lua_pop(L, 1);
+
+
+      lua_getfield(L, -1, "color");
       if (lua_isstring(L, -1)) {
         const char* hex = lua_tostring(L, -1);
-        n->color = parseHexColor(hex);
-        n->hasBackground = true;
+        SDL_Color sc = parseHexColor(hex);
+        n->textColor = {(uint8_t)sc.r, (uint8_t)sc.g, (uint8_t)sc.b, (uint8_t)sc.a};
       }
       else if (lua_istable(L, -1)) {
-        lua_rawgeti(L, -1, 1); n->color.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 2); n->color.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 3); n->color.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 4); n->color.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-
-        n->hasBackground = true;
+        lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
       }
       lua_pop(L, 1);
     }
 
-    lua_pop(L, 1);
+    n->widthStyle = getLength(L, "w");
+    n->heightStyle = getLength(L, "h");
+  }
 
-    lua_getfield(L, idx, "onClick");
-    if (lua_isfunction(L, -1)) {
-      n->onClickRef = luaL_ref(L, LUA_REGISTRYINDEX);
-    } else {
+  n->spacing = getInt("gap", getInt("spacing", 0));
+
+  int p = getInt("padding", 0);
+  n->padding       = p;
+  n->paddingTop    = getInt("paddingTop", p);
+  n->paddingBottom = getInt("paddingBottom", p);
+  n->paddingLeft   = getInt("paddingLeft", p);
+  n->paddingRight  = getInt("paddingRight", p);
+
+  int m = getInt("margin", 0);
+  n->margin       = m;
+  n->marginTop    = getInt("marginTop", m);
+  n->marginBottom = getInt("marginBottom", m);
+  n->marginLeft   = getInt("marginLeft", m);
+  n->marginRight  = getInt("marginRight", m);
+
+  n->minHeight = getInt("minHeight", 0);
+  n->maxHeight = getInt("maxHeight", 99999);
+  n->minWidth = getInt("minWidth", 0);
+  n->maxWidth = getInt("maxWidth", 99999);
+
+  n->flexGrow = getFloat("flexGrow", 0.0f);
+  n->flexShrink  = getFloat("flexShrink", 0.0f);
+  n->alignItems = parseAlign(getString("alignItems", "start"));
+  n->justifyContent = parseJustify(getString("justifyContent", "start"));
+
+  n->textAlign = parseTextAlign(getString("textAlign", "left"));
+
+  std::string overflow = getString("overflow", "hidden");
+  if (overflow == "visible") {
+    n->overflowHidden = false;
+  } else {
+    n->overflowHidden = true;
+  }
+
+  if (hasStyle) {
+    lua_getfield(L, -1, "BGColor");
+    if (lua_isstring(L, -1)) {
+      const char* hex = lua_tostring(L, -1);
+      n->color = parseHexColor(hex);
+      n->hasBackground = true;
+    }
+    else if (lua_istable(L, -1)) {
+      lua_rawgeti(L, -1, 1); n->color.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 2); n->color.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 3); n->color.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 4); n->color.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+
+      n->hasBackground = true;
+    }
+    lua_pop(L, 1);
+  }
+
+  lua_pop(L, 1);
+
+  lua_getfield(L, idx, "onClick");
+  if (lua_isfunction(L, -1)) {
+    n->onClickRef = luaL_ref(L, LUA_REGISTRYINDEX);
+  } else {
+    lua_pop(L, 1);
+  }
+
+  VDOM::updateCallback(L, idx, "onClick", n->onClickRef);
+  lua_getfield(L, idx, "children");
+  if (lua_istable(L, -1)) {
+    lua_pushnil(L);
+    while (lua_next(L, -2) != 0) {
+      Node* child = buildNode(L, lua_gettop(L));
+      child->parent = n;
+      n->children.push_back(child);
       lua_pop(L, 1);
     }
+  }
+  lua_pop(L, 1);
 
-    VDOM::updateCallback(L, idx, "onClick", n->onClickRef);
-    lua_getfield(L, idx, "children");
-    if (lua_istable(L, -1)) {
-      lua_pushnil(L);
-      while (lua_next(L, -2) != 0) {
-        Node* child = buildNode(L, lua_gettop(L));
-        child->parent = n;
-        n->children.push_back(child);
-        lua_pop(L, 1);
-      }
-    }
-    lua_pop(L, 1);
-
-    return n;
+  return n;
 }
 
 void resolveStyles(Node* n, int parentW, int parentH) {
@@ -337,11 +358,28 @@ void generateRenderCommands(Node *n, RenderCommandList &list) {
     if (!font) return;
     n->font = font;
 
-    float cursorX = n->x + n->paddingLeft;
+    float startX = n->x + n->paddingLeft;
     float cursorY = n->y + n->paddingTop + n->font->GetAscent();
 
+    float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
+  
     for (const std::string& line : n->computedLines) {
-      list.push(DrawTextCommand{line, n->font, cursorX, cursorY, n->textColor});
+
+      float lineWidth = 0;
+      for (char c : line) {
+        lineWidth += (n->font->GetCharacter(c).Advance >> 6);
+      }
+
+      float xOffset = 0;
+      if (n->textAlign == TextAlign::Center) {
+        xOffset = (contentWidth - lineWidth) / 2.0f;
+      }
+
+      else if (n->textAlign == TextAlign::Right) {
+        xOffset = contentWidth - lineWidth;
+      }
+
+      list.push(DrawTextCommand{line, n->font, startX + xOffset, cursorY, n->textColor});
       cursorY += n->computedLineHeight;
     }
   }

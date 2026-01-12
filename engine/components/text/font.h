@@ -4,6 +4,7 @@
 #include <glad/glad.h>
 #include <unordered_map>
 #include <memory>
+#include <utility>
 #include "../../lua.hpp"
 
 struct Character {
@@ -25,10 +26,17 @@ class Font {
     unsigned int GetLineHeight() const { return lineHeight; }
     unsigned int GetAscent() const { return ascent; }
 
+    const std::string& GetPath() const { return fontPath; }
+    unsigned int GetSize() const { return fontSize; }
+
   private:
     unsigned int textureID;
     unsigned int lineHeight;
     unsigned int ascent;
+  
+    std::string fontPath;
+    unsigned int fontSize;
+
     std::map<char, Character> characters;
     void Load(const std::string& path, unsigned int size);
 };
@@ -41,7 +49,7 @@ struct FontHandle {
 
 Font* UI_GetFontById(int id);
 
-
+std::pair<int, Font*> UI_LoadFont(const std::string& path, int size);
 
 void UI_ShutdownFonts();
 

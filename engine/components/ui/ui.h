@@ -32,6 +32,13 @@ enum class Align {
   Stretch
 };
 
+enum class TextAlign {
+  Left,
+  Center,
+  Right
+};
+
+
 struct Length {
   float value;
   UnitType type;
@@ -66,6 +73,8 @@ struct Node {
   int fontId = 0;
   Font* font = nullptr;
   Color textColor = {255, 255, 255, 255};
+
+  TextAlign textAlign = TextAlign::Left;
 
   std::vector<std::string> computedLines;
   float computedLineHeight = 0.0f;
@@ -116,7 +125,6 @@ struct Node {
       parent->makeLayoutDirty();
     }
   }
-
 };
 
 
@@ -135,9 +143,11 @@ void generateRenderCommands(Node* n, RenderCommandList& list);
 void freeTree(lua_State* L, Node* n);
 void resolveStyles(Node* n, int parentW, int parentH);
 void reconcile(lua_State* L, Node* current, int idx);
+
 Length getLength(lua_State* L, const char* key);
 Align parseAlign(std::string s);
 Justify parseJustify(std::string s);
+TextAlign parseTextAlign(std::string s);
 
 void UI_RegisterLuaFunctions(lua_State* L);
 void UI_SetRenderCommandList(RenderCommandList* list);
@@ -145,6 +155,6 @@ void updateTextLayout(Node* root);
 
 
 
-static RenderCommandList* activeCommandList = nullptr;
+extern RenderCommandList* activeCommandList;
 
 void UI_SetRenderCommandList(RenderCommandList* list);

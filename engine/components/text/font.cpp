@@ -5,6 +5,7 @@
 #include <lauxlib.h>
 #include <memory>
 #include <ostream>
+#include <utility>
 #include "../ui/ui.h"
 #include FT_FREETYPE_H
 
@@ -18,7 +19,25 @@ Font* UI_GetFontById(int id) {
   return it->second.get();
 }
 
-Font::Font(const std::string& fontPath, unsigned int fontSize) {
+
+std::pair<int, Font*> UI_LoadFont(const std::string &path, int size) {
+  for (const auto& [id, font] : g_fonts ) {
+    if (font->GetPath() == path && font->GetSize() == (unsigned int)size) {
+      return {id, font.get()};
+    }
+  }
+
+  int id = g_nextFontId++;
+  auto font = std::make_unique<Font>(path, size);
+  Font* fontptr = font.get();
+  g_fonts[id] = std::move(font);
+
+  return {id, fontptr};
+}
+
+
+
+Font::Font(const std::string& fontPath, unsigned int fontSize) : fontPath(fontPath), fontSize(fontSize) {
   Load(fontPath, fontSize);
 }
 
@@ -118,17 +137,21 @@ const Character& Font::GetCharacter(char c) const {
 }
 
 
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ load_text() function to load font using path and size ╏
+// ╏ this will be called from lua                          ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+
 int l_load_font(lua_State* L) {
   const GLubyte* ver = glGetString(GL_VERSION);
   if (!ver) {
-    return luaL_error(L, "load_font() called before OpenGL context is ready");
+    return luaL_error(L, "ERROR: load_font() called before OpenGL context is ready");
   }
 
   const char* path = luaL_checkstring(L, 1);
   int size = luaL_checkinteger(L, 2);
 
-  int id = g_nextFontId++;
-  g_fonts[id] = std::make_unique<Font>(path, size);
+  auto [id, font] = UI_LoadFont(path, size);
 
   FontHandle* h = (FontHandle*)lua_newuserdata(L, sizeof(FontHandle));
   h->id = id;
@@ -138,11 +161,16 @@ int l_load_font(lua_State* L) {
   return 1;
 }
 
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ text() function implementation              ╏
+// ╏ this will be called from lua                ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+
 int l_draw_text(lua_State* L) {
   if (!activeCommandList) {
     return 0;
   }
-
   const char* str = luaL_checkstring(L, 1);
   FontHandle* h = (FontHandle*)luaL_checkudata(L, 2, "FontMeta");
   if (!h) {
@@ -159,8 +187,14 @@ int l_draw_text(lua_State* L) {
   float x = luaL_checknumber(L, 3);
   float y = luaL_checknumber(L, 4);
 
+
   Color color = {255, 255, 255, 255};
-  if (lua_istable(L, 5)) {
+  if (lua_isstring(L, 5)) {
+    const char* hex = lua_tostring(L, 5);
+    SDL_Color sc = parseHexColor(hex);
+    color = {(uint8_t)sc.r, (uint8_t)sc.g, (uint8_t)sc.b, (uint8_t)sc.a};
+  }
+  else if (lua_istable(L, 5)) {
     lua_rawgeti(L, 5, 1); color.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
     lua_rawgeti(L, 5, 2); color.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
     lua_rawgeti(L, 5, 3); color.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
