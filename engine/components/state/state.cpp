@@ -2,6 +2,7 @@
 #include <lauxlib.h>
 #include <lua.h>
 #include <variant>
+#include <string>
 
 void pushStateValue(lua_State* L, const StateValue& val) {
   if (std::holds_alternative<int>(val)) {
@@ -68,9 +69,29 @@ int l_useState(lua_State* L) {
   return 1;
 }
 
+int l_setFocus(lua_State* L) {
+  if (lua_isnil(L, 1)) {
+    StateManager::instance().setFocus("");
+    return 0;
+  }
+
+  const char* key = luaL_checkstring(L, 1);
+  StateManager::instance().setFocus(std::string(key));
+  return 0;
+}
+
+int l_getFocus(lua_State* L) {
+  std::string fk = StateManager::instance().getFocus();
+  if (fk.empty()) lua_pushnil(L);
+  else lua_pushstring(L, fk.c_str());
+  return 1;
+}
+
 void registerStateBindings(lua_State* L) {
   lua_register(L, "setState", l_setState);
   lua_register(L, "useState", l_useState);
+  lua_register(L, "setFocus", l_setFocus);
+  lua_register(L, "getFocus", l_getFocus);
 }
 
 

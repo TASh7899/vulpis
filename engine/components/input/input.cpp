@@ -1,6 +1,7 @@
 #include "input.h"
+#include "../../lua.hpp"
 #include <iostream>
-#include <lua.h>
+#include <functional>
 
 namespace Input {
   Node* hitTest(Node* root, int x, int y) {
@@ -9,7 +10,7 @@ namespace Input {
       return nullptr;
     }
 
-    for (int i = root->children.size() - 1; i >= 0; --i) {
+    for (int i = (int)root->children.size() - 1; i >= 0; --i) {
       Node* target = hitTest(root->children[i], x, y);
       if (target) {
         return target;
@@ -19,32 +20,56 @@ namespace Input {
     return root;
   }
 
-  void handleEvent(lua_State *L, SDL_Event &event, Node *root) {
-    if (event.type == SDL_MOUSEBUTTONDOWN) {
-      int mx = event.button.x;
-      int my = event.button.y;
+  InputEvent process(const SDL_Event& event) {
+    return InputEvent::fromSDL(event);
+  }
 
-      Node* target = hitTest(root, mx, my);
+  std::vector<Node*> resolveTarget(const InputEvent& ev, Node* root) {
+    std::vector<Node*> chain;
+    if (!root) return chain;
 
-      while (target) {
+    if (ev.type == InputEvent::Type::CLICK || ev.type == InputEvent::Type::MOVE) {
+      Node* t = hitTest(root, ev.x, ev.y);
+      while (t) {
+        chain.push_back(t);
+        t = t->parent;
+      }
+    }
+
+    return chain;
+  }
+
+  bool dispatchAction(lua_State* L, const InputEvent& ev, const std::vector<Node*>& chain) {
+    if (!L) return false;
+
+    if (ev.type == InputEvent::Type::CLICK) {
+      for (Node* target : chain) {
+        if (!target) continue;
         if (target->onClickRef != -2) {
           lua_rawgeti(L, LUA_REGISTRYINDEX, target->onClickRef);
 
           if (!lua_isfunction(L, -1)) {
             lua_pop(L, 1);
-            target = target->parent;
             continue;
-
           }
+
           if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
             std::cout << "Input Error:" << lua_tostring(L, -1) << std::endl;
             lua_pop(L, 1);
           }
 
-          break;
+          return true;
         }
-        target = target->parent;
       }
     }
+
+    return false;
   }
+
+  void handleEvent(lua_State *L, SDL_Event &event, Node *root) {
+    InputEvent ev = process(event);
+    std::vector<Node*> chain = resolveTarget(ev, root);
+    dispatchAction(L, ev, chain);
+  }
+
 }

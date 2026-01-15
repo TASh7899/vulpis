@@ -46,10 +46,26 @@ target_include_directories(vulpis PRIVATE
   ${FREETYPE_INCLUDE_DIRS}
 )
 
+# Ensure we compile against the static Lua layout when linking the vcpkg-provided lua.lib
+# The project header (`engine/lua.hpp`) already undefines LUA_BUILD_AS_DLL when needed.
+target_compile_definitions(vulpis PRIVATE LUA_LIB)
+
 
 target_link_libraries(vulpis PRIVATE
   ${SDL2_LIBRARIES}
-  ${LUA_LIBRARIES}
+)
+
+# Link Lua: prefer imported target if provided by package config, otherwise
+# fall back to the traditional ${LUA_LIBRARIES} variable.
+if (TARGET Lua::Lua)
+  target_link_libraries(vulpis PRIVATE Lua::Lua)
+elseif(DEFINED LUA_LIBRARIES)
+  target_link_libraries(vulpis PRIVATE ${LUA_LIBRARIES})
+else()
+  message(WARNING "Lua not found via find_package(Lua). ${LUA_LIBRARIES} is not defined and Lua::Lua target not provided.")
+endif()
+
+target_link_libraries(vulpis PRIVATE
   yogacore
   OpenGL::GL
   glad
@@ -57,12 +73,16 @@ target_link_libraries(vulpis PRIVATE
   ${FREETYPE_LIBRARIES}
 )
 
-add_custom_command(TARGET vulpis POST_BUILD
-  COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/src/assets
-    ${CMAKE_BINARY_DIR}/src/assets
-  COMMENT "Copying assets to build directory.."
-)
+if(EXISTS ${CMAKE_SOURCE_DIR}/src/assets)
+  add_custom_command(TARGET vulpis POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+      ${CMAKE_SOURCE_DIR}/src/assets
+      ${CMAKE_BINARY_DIR}/src/assets
+    COMMENT "Copying assets to build directory.."
+  )
+else()
+  message(STATUS "No src/assets directory to copy; skipping post-build asset copy.")
+endif()
 
 
 
