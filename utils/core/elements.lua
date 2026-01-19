@@ -1,5 +1,22 @@
 local elements = {}
 
+if not _G.Vulpis then _G.Vulpis = {} end
+if not _G.Vulpis.Input then
+	_G.Vulpis.Input = { active = {}, hovered = {}, focused = nil }
+end
+
+function _G.Vulpis.getInteractionState(key)
+	local hovered = false
+	if _G.Vulpis.Input.hovered and _G.Vulpis.Input.hovered[key] then hovered = true end
+
+	local pressed = false
+	if _G.Vulpis.Input.active and _G.Vulpis.Input.active[key] then pressed = true end
+
+	local focused = (_G.Vulpis.Input.focused == key)
+
+	return { hovered = hovered, pressed = pressed, focused = focused }
+end
+
 local DEFAULT_FONT_PATH = "src/assets/font.ttf"
 local DEFAULT_FONT_SIZE = 18
 
@@ -28,8 +45,16 @@ function elements.setSystemFont(font)
 	_systemFont = font
 end
 
-function elements.mergeStyles(base, override)
+function elements.mergeStyles(base, override, state)
 	local res = {}
+
+	if type(base) == "function" and state then
+		base = base(state)
+	end
+	if type(override) == "function" and state then
+		override = override(state)
+	end
+
 	for k, v in pairs(base or {}) do
 		res[k] = v
 	end
@@ -61,6 +86,12 @@ function elements.Box(props)
 	local node = {
 		type = t,
 		style = props.style or {},
+		resolveStyle = function(self, state)
+			if type(self.style) == "function" then
+				return self.style(state)
+			end
+			return self.style or {}
+		end,
 		children = props.children or {},
 		onClick = props.onClick,
 		key = props.key,

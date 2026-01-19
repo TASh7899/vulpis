@@ -220,7 +220,10 @@ lua_pop(L, 1);
         running = false;
       }
 
-      Input::handleEvent(L, event, root);
+      // New input routing: convert SDL -> InputEvent, resolve target chain and dispatch
+      Input::InputEvent ev = Input::process(event);
+      std::vector<Node*> chain = Input::resolveTarget(ev, root);
+      Input::dispatchAction(L, ev, chain);
 
       if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
         winW = event.window.data1;
