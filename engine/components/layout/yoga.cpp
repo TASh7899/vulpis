@@ -8,6 +8,7 @@
 #include <yoga/Yoga.h>
 #include <vector>
 #include "../ui/ui.h"
+#include "../text/font.h"
 
 namespace Layout {
 
@@ -26,6 +27,8 @@ namespace Layout {
     }
 
     TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
+    n->computedLines = res.lines;
+    n->computedLineHeight = n->font->GetLineHeight();
 
     size.width = std::ceil(res.width);
     size.height = std::ceil(res.height);

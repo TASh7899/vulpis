@@ -10,6 +10,7 @@ struct Vertex {
   float x, y;
   float u, v;
   Color color;
+  float isColor;
 };
 
 class OpenGLRenderer : public Renderer {

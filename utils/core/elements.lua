@@ -1,33 +1,5 @@
 local elements = {}
 
-local DEFAULT_FONT_PATH = "src/assets/font.ttf"
-local DEFAULT_FONT_SIZE = 18
-
-local _systemFont = nil
-
-local function getSystemFont()
-	if _systemFont then
-		return _systemFont
-	end
-
-	if load_font then
-		local status, font = pcall(load_font, DEFAULT_FONT_PATH, DEFAULT_FONT_SIZE)
-
-		if status and font then
-			_systemFont = font
-			return font
-		else
-			print("[Elements] WARNING: Could not auto-load font at: " .. DEFAULT_FONT_PATH)
-		end
-	end
-
-	return nil
-end
-
-function elements.setSystemFont(font)
-	_systemFont = font
-end
-
 function elements.mergeStyles(base, override)
 	local res = {}
 	for k, v in pairs(base or {}) do
@@ -82,6 +54,7 @@ function elements.HBox(props)
 end
 
 function elements.Text(props)
+	-- Support shorthand: el.Text("Hello")
 	if type(props) == "string" then
 		props = { text = props }
 	end
@@ -90,12 +63,11 @@ function elements.Text(props)
 	props.type = "text"
 	props.style = props.style or {}
 
-	if not props.style.font then
-		props.style.font = getSystemFont()
-	end
-
-	if not props.style.color then
-		props.style.color = { 255, 255, 255, 255 }
+	-- [UPDATED] Directly use FontColor as requested.
+	-- We no longer map 'color' to 'FontColor'.
+	-- If FontColor is missing, default to White so it is visible.
+	if not props.style.FontColor then
+		props.style.FontColor = "#FFFFFF"
 	end
 
 	return props

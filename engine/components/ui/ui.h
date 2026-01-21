@@ -136,7 +136,7 @@ struct TextLayoutResult {
 
 TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float maxWidth);
 
-
+extern int g_defaultFontId;
 
 Node* buildNode(lua_State* L, int idx);
 void generateRenderCommands(Node* n, RenderCommandList& list);

@@ -5,8 +5,11 @@
 #include <vector>
 #include "../text/font.h"
 
-namespace VDOM {
 
+extern int g_defaultFontId;
+
+
+namespace VDOM {
 
   bool operator!=(const Length& a, const Length& b) {
     return a.value != b.value || a.type != b.type;
@@ -101,34 +104,45 @@ namespace VDOM {
     }
 
     if (n->type == "text") {
-      lua_getfield(L, idx, "font");
+      int targetFontId = -1;
+      bool manualFontFound = false;
+
+      lua_getfield(L, idx, "fontObject");
       if (lua_isuserdata(L, -1)) {
-        Font** fontPtr = (Font**)luaL_checkudata(L, -1, "FontMeta");
-        if (fontPtr && *fontPtr && n->font != *fontPtr) {
-          n->font = *fontPtr;
-          n->computedLines.clear(); // Font metrics changed
+        FontHandle* h = (FontHandle*)luaL_checkudata(L, -1, "FontMeta");
+        if (h) {
+          targetFontId = h->id;
+          manualFontFound = true;
+        }
+      }
+      lua_pop(L, 1);
+
+
+      if (!manualFontFound) {
+        std::string family = getStringProp(L, "fontFamily", "Iosevka");
+        std::string weight = getStringProp(L, "fontWeight", "regular");
+
+        bool isItalic = false;
+        lua_getfield(L, -1, "fontStyle");
+        if (lua_isstring(L, -1)) {
+          std::string s = lua_tostring(L, -1);
+          if (s == "italic") isItalic = true;
+        }
+        lua_pop(L, 1);
+
+        int size = getIntProp(L, "fontSize", 16);
+        targetFontId = UI_GetOrLoadFont(family, weight, size, isItalic);
+      }
+
+      if (targetFontId != -1 && n->fontId != targetFontId) {
+        n->fontId = targetFontId;
+        n->font = UI_GetFontById(targetFontId);
+
+        if (n->font) {
+          n->computedLines.clear();
           layoutChanged = true;
         }
       }
-      lua_pop(L, 1);
-
-      lua_getfield(L, idx, "fontSize");
-      if (lua_isnumber(L, -1)) {
-        int newSize = (int)lua_tointeger(L, -1);
-
-        // If the size changed, we need to request a new font handle from the cache
-        if (n->font && newSize > 0 && (int)n->font->GetSize() != newSize) {
-          auto [id, fontPtr] = UI_LoadFont(n->font->GetPath(), newSize);
-
-          if (n->font != fontPtr) {
-            n->font = fontPtr;
-            n->fontId = id;
-            n->computedLines.clear(); // Text needs re-measuring
-            layoutChanged = true;
-          }
-        }
-      }
-      lua_pop(L, 1);
 
       lua_getfield(L, idx, "color");
       if (!lua_isnil(L, -1)) {

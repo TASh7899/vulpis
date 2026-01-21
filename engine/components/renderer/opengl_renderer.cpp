@@ -2,15 +2,21 @@
 #include "commands.h"
 #include <SDL_video.h>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
+#include <sys/types.h>
 #include <variant>
 #include <vector>
+#include "../text/font.h"
+
 
 const char* vertexSource = R"(
 #version 330 core
 layout (location = 0) in vec2 aPos;
 layout (location = 1) in vec2 aTextCoord;
 layout (location = 2) in vec4 aColor;
+layout (location = 3) in float aIsColor;
+out float fIsColor;
 
 out vec4 fColor;
 out vec2 fTextCoord;
@@ -20,6 +26,7 @@ void main() {
   gl_Position = projection * vec4(aPos, 0.0, 1.0);
   fColor = aColor;
   fTextCoord = aTextCoord;
+  fIsColor = aIsColor;
 }
 )";
 
@@ -28,11 +35,23 @@ const char* fragmentSource = R"(
   out vec4 FragColor;
   in vec4 fColor;
   in vec2 fTextCoord;
+  in float fIsColor;
 
   uniform sampler2D texSampler;
 
   void main() {
-      FragColor = fColor * texture(texSampler, fTextCoord);
+    vec4 tex = texture(texSampler, fTextCoord);
+
+    if (fIsColor > 0.5) {
+      if (tex.a > 0.0) {
+        FragColor = vec4(tex.rgb / tex.a, tex.a);
+      } else {
+        FragColor = vec4(0.0);
+      }
+    } else {
+      float alpha = (tex.a > 0.0 && tex.a < 1.0) ? tex.a : tex.r;
+      FragColor = vec4(fColor.rgb, fColor.a * alpha);
+    }
   }
 )";
 
@@ -72,6 +91,8 @@ OpenGLRenderer::~OpenGLRenderer() {
 }
 
 void OpenGLRenderer::initShaders() {
+  if (shaderProgram) glDeleteProgram(shaderProgram);
+  
   // Compile Vertex Shader
   GLuint vs = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(vs, 1, &vertexSource, NULL);
@@ -108,6 +129,9 @@ void OpenGLRenderer::initBuffers() {
   glEnableVertexAttribArray(2); // Color
   glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, color));
 
+  glEnableVertexAttribArray(3); // isColor
+  glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, isColor));
+
   glBindVertexArray(0);
 }
 
@@ -116,6 +140,9 @@ void OpenGLRenderer::beginFrame() {
   int drawableW, drawableH;
   SDL_GL_GetDrawableSize(window, &drawableW, &drawableH);
   glViewport(0, 0, drawableW, drawableH);
+
+  float dpiScaleX = (float)drawableW / winWidth;
+  float dpiScaleY = (float)drawableH / winHeight;
 
   glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
@@ -149,11 +176,12 @@ void OpenGLRenderer::flush() {
   if (vertices.empty()) return;
 
   glBindTexture(GL_TEXTURE_2D, currentTextureID);
-  
   glBindVertexArray(vao);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), nullptr, GL_DYNAMIC_DRAW);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, vertices.size() * sizeof(Vertex), vertices.data());
+
   glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 
   glBindVertexArray(0);
@@ -189,37 +217,42 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
 
     else if (std::holds_alternative<DrawTextCommand>(cmd)) {
       const auto& data = std::get<DrawTextCommand>(cmd);
-      GLuint fontTex = data.font->GetTextureID();
-
-      if (currentTextureID != fontTex) {
-        flush();
-        currentTextureID = fontTex;
-      }
-
+      
       float cursorX = data.x;
       float cursorY = data.y;
 
-      for (char c : data.text) {
-        const Character& ch = data.font->GetCharacter(c);
+      int i = 0;
+      while (i < (int)data.text.size()) {
+        uint32_t codepoint = utf8_next(data.text, i);
+        const Character& ch = data.font->GetCharacter(codepoint);
 
-        float xpos = cursorX + ch.BearingX;
-        float ypos = cursorY + (ch.SizeY - ch.BearingY);
-        float w = (float)ch.SizeX;
-        float h = (float)ch.SizeY;
+        if (currentTextureID != ch.TextureID) {
+          flush();
+          currentTextureID = ch.TextureID;
+        }
+
+
+        float s = data.font->GetScale();
+        float xpos = cursorX + (ch.BearingX * s);
+        float ypos = cursorY + ((ch.SizeY - ch.BearingY) * s);
+        float w = (float)ch.SizeX * s;
+        float h = (float)ch.SizeY * s;
+
+        float isCol = ch.isColor ? 1.0f : 0.0f;
 
         // triangle 1
-        vertices.push_back({ xpos + w, ypos, ch.uMax, ch.vMax, data.color });
-        vertices.push_back({ xpos + w, ypos - h, ch.uMax, ch.vMin, data.color });
-        vertices.push_back({ xpos, ypos - h, ch.uMin, ch.vMin, data.color});
+        vertices.push_back({ xpos + w, ypos, ch.uMax, ch.vMax, data.color, isCol });
+        vertices.push_back({ xpos + w, ypos - h, ch.uMax, ch.vMin, data.color, isCol });
+        vertices.push_back({ xpos, ypos - h, ch.uMin, ch.vMin, data.color, isCol});
 
         // triangle 2
-        vertices.push_back({ xpos, ypos - h, ch.uMin, ch.vMin, data.color });
-        vertices.push_back({ xpos, ypos, ch.uMin, ch.vMax, data.color });
-        vertices.push_back({ xpos + w, ypos, ch.uMax, ch.vMax, data.color });
+        vertices.push_back({ xpos, ypos - h, ch.uMin, ch.vMin, data.color, isCol });
+        vertices.push_back({ xpos, ypos, ch.uMin, ch.vMax, data.color, isCol });
+        vertices.push_back({ xpos + w, ypos, ch.uMax, ch.vMax, data.color, isCol });
 
         // freetype stores advance values as 26.6 fixed point, meaning the value is scaled by 64, we divide by 64 to get pixels.
         // this is just a faster way to divide by 64
-        cursorX += (ch.Advance >> 6);
+        cursorX += (ch.Advance >> 6) * s;
       }
     }
 

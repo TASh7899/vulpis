@@ -19,10 +19,12 @@ void UI_SetRenderCommandList(RenderCommandList* list) {
   activeCommandList = list;
 }
 
+int g_defaultFontId = -1; 
 
 void UI_RegisterLuaFunctions(lua_State *L) {
   lua_register(L, "load_font", l_load_font);
   lua_register(L, "text", l_draw_text);
+  lua_register(L, "add_fallback_font", l_add_fallback);
   
   luaL_newmetatable(L, "FontMeta");
   lua_pop(L, 1);
@@ -78,8 +80,77 @@ TextAlign parseTextAlign(std::string s) {
   return TextAlign::Left;
 }
 
+
+void applyTextStyle(lua_State* L, Node* n, bool fontFound) {
+  if (!lua_istable(L, -1)) return;
+
+  std::string family = "Iosevka"; // Default to bundled
+  std::string weight = "regular";
+  bool isItalic = false;
+  int size = 16;
+
+  if (fontFound && n->font) {
+    size = n->font->GetSize();
+  }
+
+  lua_getfield(L, -1, "fontSize");
+  if (lua_isstring(L, -1)) {
+    size = (int)lua_tointeger(L, -1);
+    lua_pop(L, 1);
+  }
+
+  // fontWeight ("bold", "thin", etc.)
+    lua_getfield(L, -1, "fontWeight");
+    if (lua_isstring(L, -1)) weight = lua_tostring(L, -1);
+    lua_pop(L, 1);
+
+    // fontStyle ("italic")
+    lua_getfield(L, -1, "fontStyle");
+    if (lua_isstring(L, -1)) {
+        std::string s = lua_tostring(L, -1);
+        if (s == "italic") isItalic = true;
+    }
+    lua_pop(L, 1);
+
+    // fontFamily ("Iosevka", "Arial", etc.)
+    lua_getfield(L, -1, "fontFamily");
+    if (lua_isstring(L, -1)) family = lua_tostring(L, -1);
+    lua_pop(L, 1);
+
+    if (!fontFound) {
+      int id = UI_GetOrLoadFont(family, weight, size, isItalic);
+
+      if (id != -1) {
+        n->fontId = id;
+        n->font = UI_GetFontById(id);
+      } else if (g_defaultFontId != -1) {
+        n->fontId = g_defaultFontId;
+        n->font = UI_GetFontById(g_defaultFontId);
+      }
+    } else if (n->font && n->font->GetSize() != (unsigned int)size) {
+      auto [id, ptr] = UI_LoadFont(n->font->GetPath(), size, n->font->IsFakeItalic());
+      n->fontId = id;
+      n->font = ptr;
+    }
+
+    lua_getfield(L, -1, "FontColor");
+    if (lua_isstring(L, -1)) {
+      const char* hex = lua_tostring(L, -1);
+      SDL_Color sc = parseHexColor(hex);
+      n->textColor = {(uint8_t)sc.r, (uint8_t)sc.g, (uint8_t)sc.b, (uint8_t)sc.a};
+    } else if (lua_istable(L, -1)) {
+      lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+}
+
+
+
 Node* buildNode(lua_State* L, int idx) {
-  luaL_checktype(L, idx, LUA_TTABLE);
+  if (!lua_istable(L, idx)) return nullptr;
 
   Node* n = new Node();
 
@@ -88,11 +159,28 @@ Node* buildNode(lua_State* L, int idx) {
     n->type = lua_tostring(L, -1);
   lua_pop(L, 1);
 
-  lua_getfield(L, idx, "text");
-  if (lua_isstring(L, -1)) {
-    n->text = lua_tostring(L, -1);
+  bool fontFound = false;
+
+  if (n->type == "text") {
+
+    lua_getfield(L, idx, "text");
+    if (lua_isstring(L, -1)) {
+      n->text = lua_tostring(L, -1);
+    }
+    lua_pop(L, 1);
+
+    lua_getfield(L, idx, "fontObject"); // Check for manual object
+    if (lua_isuserdata(L, -1)) {
+      FontHandle* h = (FontHandle*)luaL_checkudata(L, -1, "FontMeta");
+      if (h) {
+        n->fontId = h->id;
+        n->font = UI_GetFontById(h->id);
+        fontFound = true;
+      }
+    }
+    lua_pop(L, 1);
+
   }
-  lua_pop(L, 1);
 
   lua_getfield(L, idx, "style");
   bool hasStyle = lua_istable(L, -1);
@@ -130,46 +218,16 @@ Node* buildNode(lua_State* L, int idx) {
 
   if (hasStyle) {
     if (n->type == "text") {
-      lua_getfield(L, -1, "font");
-      if (lua_isuserdata(L, -1)) {
-        FontHandle* h = (FontHandle*)luaL_checkudata(L, -1, "FontMeta");
-        if (h) {
-          n->fontId = h->id;
-          n->font = UI_GetFontById(h->id);
-
-        }
-      }
-      lua_pop(L, 1);
-
-      lua_getfield(L, -1, "fontSize");
-      if (lua_isnumber(L, -1)) {
-        int newSize = (int)lua_tointeger(L, -1);
-        if (n->font && newSize > 0) {
-          auto [id, fontptr] = UI_LoadFont(n->font->GetPath(), newSize);
-          n->font = fontptr;
-          n->fontId = id;
-        }
-      }
-      lua_pop(L, 1);
-
-
-      lua_getfield(L, -1, "color");
-      if (lua_isstring(L, -1)) {
-        const char* hex = lua_tostring(L, -1);
-        SDL_Color sc = parseHexColor(hex);
-        n->textColor = {(uint8_t)sc.r, (uint8_t)sc.g, (uint8_t)sc.b, (uint8_t)sc.a};
-      }
-      else if (lua_istable(L, -1)) {
-        lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-      }
-      lua_pop(L, 1);
+      applyTextStyle(L, n, fontFound);
     }
 
     n->widthStyle = getLength(L, "w");
     n->heightStyle = getLength(L, "h");
+  } else {
+    if (n->type == "text" && !fontFound && g_defaultFontId != -1) {
+      n->fontId = g_defaultFontId;
+      n->font = UI_GetFontById(g_defaultFontId);
+    }
   }
 
   n->spacing = getInt("gap", getInt("spacing", 0));
@@ -240,8 +298,11 @@ Node* buildNode(lua_State* L, int idx) {
     lua_pushnil(L);
     while (lua_next(L, -2) != 0) {
       Node* child = buildNode(L, lua_gettop(L));
-      child->parent = n;
-      n->children.push_back(child);
+      if (child != nullptr) {
+        child->parent = n;
+        n->children.push_back(child);
+      }
+
       lua_pop(L, 1);
     }
   }
@@ -362,12 +423,14 @@ void generateRenderCommands(Node *n, RenderCommandList &list) {
     float cursorY = n->y + n->paddingTop + n->font->GetAscent();
 
     float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
-  
+
     for (const std::string& line : n->computedLines) {
 
       float lineWidth = 0;
-      for (char c : line) {
-        lineWidth += (n->font->GetCharacter(c).Advance >> 6);
+      int i = 0;
+      while (i < (int)line.size()) {
+        uint32_t codepoint = utf8_next(line, i);
+        lineWidth += (n->font->GetCharacter(codepoint).Advance >> 6) * n->font->GetScale();;
       }
 
       float xOffset = 0;
@@ -427,7 +490,11 @@ TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float 
 
   auto measureStr = [&](const std::string& str) -> float {
     float w = 0;
-    for (char c : str) w += (font->GetCharacter(c).Advance >> 6);
+    int i = 0;
+    while (i < (int)str.size()) {
+      uint32_t codepoint = utf8_next(str, i);
+      w += (font->GetCharacter(codepoint).Advance >> 6) * font->GetScale();
+    }
     return w;
   };
 
@@ -475,31 +542,6 @@ TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float 
 
   result.height = currentY;
   return result;
-}
-
-
-void computeTextLayout(Node* n) {
-  Font* font = n->font ? n->font : UI_GetFontById(n->fontId);
-  n->font = font;
-
-  if (n->type != "text" || !n->font || n->text.empty()) {
-    n->computedLines.clear();
-    return;
-  }
-
-  float maxWidth = n->w - (n->paddingLeft + n->paddingRight);
-  TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
-
-  n->computedLines = res.lines;
-  n->computedLineHeight = (float)n->font->GetLineHeight();
-}
-
-void updateTextLayout(Node* root) {
-  if (!root) return;
-  computeTextLayout(root);
-  for (Node* c : root->children) {
-    updateTextLayout(c);
-  }
 }
 
 
