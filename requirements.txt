@@ -1,0 +1,6 @@
+fonttools
+blackrenderer
+skia-python
+skia-pathops
+ufoLib2
+uharfbuzz
