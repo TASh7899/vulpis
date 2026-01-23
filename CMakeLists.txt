@@ -1,6 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
 
-set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+set(VCPKG_ROOT "${CMAKE_SOURCE_DIR}/third_party/vcpkg")
+
+if(EXISTS "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+  set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
+else()
+  if(DEFINED ENV{VCPKG_ROOT})
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
+  else()
+    message(WARNING "Vcpkg not found in third_party/vcpkg or ENV{VCPKG_ROOT}. Dependency installation may fail.")
+  endif()
+endif()
 
 project(vulpis LANGUAGES CXX C)
 
