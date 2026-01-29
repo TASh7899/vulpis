@@ -2,6 +2,8 @@
 #ifdef _WIN32
     // Windows does not have endian.h; SDL provides these macros
     #include <SDL_endian.h>
+#elif defined(__APPLE__)
+  #include <machine/endian.h>
 #else
     #include <endian.h>
 #endif
