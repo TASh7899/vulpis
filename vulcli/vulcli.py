@@ -136,28 +136,30 @@ def run(root_dir):
 
 def check_vcpkg(root_dir):
     vcpkg_dir = os.path.join(root_dir, "third_party", "vcpkg")
-
     is_windows = platform.system() == "Windows"
-    script_name = "bootstrap-vcpkg.bat" if is_windows else "bootstrap-vcpkg.sh"
-    script_path = os.path.join(vcpkg_dir, script_name)
+    
+    # Define the bootstrap script name based on the OS
+    bootstrap_script = "bootstrap-vcpkg.bat" if is_windows else "bootstrap-vcpkg.sh"
+    bootstrap_path = os.path.join(vcpkg_dir, bootstrap_script)
 
+    # Check for the bootstrap script instead of .git to trigger submodule initialization
+    if not os.path.exists(bootstrap_path):
+        print("--- vcpkg files missing. Initializing vcpkg submodule ---")
+        subprocess.run(["git", "submodule", "update", "--init", "--recursive"], cwd=root_dir, check=True)
+
+    # Check if the vcpkg executable exists
     exe_name = "vcpkg.exe" if is_windows else "vcpkg"
     vcpkg_exe = os.path.join(vcpkg_dir, exe_name)
 
-
-    if not os.path.exists(script_path):
-        print("--- Initializing vcpkg submodule ---")
-        subprocess.run(["git", "submodule", "update", "--init", "--recursive"], cwd=root_dir, check=True)
-
-
     if not os.path.exists(vcpkg_exe):
         print("--- 🛠️  Bootstrapping vcpkg (First run only) ---")
-
         if is_windows:
-            subprocess.run([script_name], cwd=vcpkg_dir, shell=True, check=True)
+            subprocess.run([bootstrap_script], cwd=vcpkg_dir, shell=True, check=True)
         else:
-            os.chmod(script_path, 0o755)
-            subprocess.run([script_path], cwd=vcpkg_dir, shell=False, check=True)
+            # Grant executable permissions on Unix-like systems before running
+            os.chmod(bootstrap_path, 0o755)
+            subprocess.run([bootstrap_path], cwd=vcpkg_dir, shell=False, check=True)
+            
     print("--- vcpkg is ready ---")
 
 if __name__ == "__main__":
