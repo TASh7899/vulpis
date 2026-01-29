@@ -48,11 +48,31 @@ namespace Vulpis {
 
   // getAssetPath combines relative path with executable directory to get absolute path
   std::string getAssetPath(const std::string& relativePath) {
-    static const fs::path baseDir = getExecutableDir();
-    return (baseDir / relativePath).string();
+    static const fs::path exeDir = getExecutableDir();
+
+    std::vector<fs::path> candidates;
+
+    // 1. Check ../assets/ (Development: build folder is usually one level deep)
+    candidates.push_back(exeDir.parent_path() / "assets" / relativePath);
+
+    // 2. Check ./assets/ (Release: assets next to exe)
+    candidates.push_back(exeDir / "assets" / relativePath);
+
+    // 3. Check direct path (User supplied "assets/..." manually)
+    candidates.push_back(exeDir / relativePath);
+    
+    // 4. Check ../ (Directly in root)
+    candidates.push_back(exeDir.parent_path() / relativePath);
+
+    for (const auto& path : candidates) {
+      if (fs::exists(path)) {
+        return path.string();
+      }
+    }
+
+    // Return the first candidate as default for error reporting
+    return candidates[0].string();
   }
-
-
 }
 
 

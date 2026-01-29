@@ -6,7 +6,8 @@ out/
 dist/
 Debug/
 Release/
-
+assets/*
+!assets/.gitkeep
 
 src/*
 !src/.gitkeep

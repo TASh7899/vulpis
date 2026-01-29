@@ -44,6 +44,7 @@ add_executable(vulpis
   engine/components/renderer/opengl_renderer.cpp
   engine/components/text/font.cpp
   engine/components/system/pathUtils.cpp
+  engine/components/ui/configLogic/font_registry.cpp
 )
 
 target_link_libraries(vulpis PRIVATE
@@ -64,10 +65,22 @@ target_include_directories(vulpis PRIVATE
   ${LUA_INCLUDE_DIR}
 )
 
-add_custom_command(TARGET vulpis POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_SOURCE_DIR}/src/assets
-    COMMAND ${CMAKE_COMMAND} -E create_symlink 
-            ${CMAKE_SOURCE_DIR}/src/assets
-            ${CMAKE_BINARY_DIR}/assets
-    COMMENT "Linking assets to the build directory"
-)
+set(ASSETS_SOURCE "${CMAKE_SOURCE_DIR}/assets")
+set(ASSETS_DEST "${CMAKE_BINARY_DIR}/assets")
+
+if (WIN32)
+  add_custom_target(SyncAssets ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${ASSETS_SOURCE}
+    ${ASSETS_DEST}
+    COMMENT "Syncing assets to build directory..."
+  )
+else()
+  add_custom_target(SyncAssets ALL
+    COMMAND ${CMAKE_COMMAND} -E create_symlink
+    ${ASSETS_SOURCE}
+    ${ASSETS_DEST}
+    COMMENT "Ensuring assets symlink exists..."
+  )
+endif()
+add_dependencies(vulpis SyncAssets)

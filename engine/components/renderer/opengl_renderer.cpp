@@ -2,6 +2,7 @@
 #include "commands.h"
 #include <SDL_video.h>
 #include <cstddef>
+#include <cstdint>
 #include <iostream>
 #include <variant>
 #include <vector>
@@ -199,8 +200,15 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       float cursorX = data.x;
       float cursorY = data.y;
 
-      for (char c : data.text) {
+      std::vector<uint32_t> codepoints = Font::DecodeUTF8(data.text);
+
+      for (uint32_t c : codepoints) {
         const Character& ch = data.font->GetCharacter(c);
+
+        if (ch.TextureID != currentTextureID) {
+          flush();
+          currentTextureID = ch.TextureID;
+        }
 
         float xpos = cursorX + ch.BearingX;
         float ypos = cursorY + (ch.SizeY - ch.BearingY);

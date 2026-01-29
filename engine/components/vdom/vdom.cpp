@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include "../text/font.h"
+#include "../ui/configLogic/font_registry.h"
 
 namespace VDOM {
 
@@ -101,18 +102,60 @@ namespace VDOM {
     }
 
     if (n->type == "text") {
-      lua_getfield(L, idx, "font");
+      lua_getfield(L, -1, "font");
       if (lua_isuserdata(L, -1)) {
-        Font** fontPtr = (Font**)luaL_checkudata(L, -1, "FontMeta");
-        if (fontPtr && *fontPtr && n->font != *fontPtr) {
-          n->font = *fontPtr;
-          n->computedLines.clear(); // Font metrics changed
-          layoutChanged = true;
+        FontHandle* h = (FontHandle*)luaL_checkudata(L, -1, "FontMeta");
+        if (h) {
+          Font* fontPtr = UI_GetFontById(h->id);
+          // If new font is valid and different, update
+          if (fontPtr && n->font != fontPtr) {
+            n->font = fontPtr;
+            n->fontId = h->id;
+            n->computedLines.clear();
+            layoutChanged = true;
+          }
         }
       }
       lua_pop(L, 1);
 
-      lua_getfield(L, idx, "fontSize");
+      lua_getfield(L, -1, "fontFamily");
+      if (lua_isstring(L, -1)) {
+        std::string alias = lua_tostring(L, -1);
+        const FontConfig* config = GetFontConfig(alias);
+
+        if (config) {
+          int targetSize = config->size;
+
+          // Check if fontSize overrides the config size locally
+          lua_getfield(L, -2, "fontSize");
+          if (lua_isnumber(L, -1)) {
+            targetSize = (int)lua_tonumber(L, -1);
+          }
+          lua_pop(L, 1);
+
+          // Load/Get the font from the cache
+          auto [id, fontPtr] = UI_LoadFont(config->path, targetSize);
+
+          // If the resolved font is different, update the node
+          if (n->font != fontPtr) {
+            n->font = fontPtr;
+            n->fontId = id;
+            n->computedLines.clear();
+            layoutChanged = true;
+          }
+        } else {
+          if (n->font != nullptr) {
+            n->font = nullptr;
+            n->fontId = 0;
+            n->computedLines.clear();
+            layoutChanged = true;
+          }
+        }
+      }
+      lua_pop(L, 1);
+
+
+      lua_getfield(L, -1, "fontSize");
       if (lua_isnumber(L, -1)) {
         int newSize = (int)lua_tointeger(L, -1);
 
@@ -130,7 +173,7 @@ namespace VDOM {
       }
       lua_pop(L, 1);
 
-      lua_getfield(L, idx, "color");
+      lua_getfield(L, -1, "color");
       if (!lua_isnil(L, -1)) {
         Color newTextColor = n->textColor;
 

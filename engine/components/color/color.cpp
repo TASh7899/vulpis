@@ -1,4 +1,5 @@
 #include "color.h"
+#include <iostream>
 
 SDL_Color parseHexColor(const char* hexStr) {
   SDL_Color color = {0, 0, 0, 255};
@@ -41,3 +42,4 @@ SDL_Color parseHexColor(const char* hexStr) {
 
   return color;
 }
+

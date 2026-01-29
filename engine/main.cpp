@@ -15,6 +15,7 @@
 #include "components/state/state.h"
 #include "components/input/input.h"
 #include "components/vdom/vdom.h"
+#include "components/ui/configLogic/font_registry.h"
 
 
 int main(int argc, char* argv[]) {
@@ -169,6 +170,7 @@ lua_pop(L, 1);
   OpenGLRenderer renderer(window);
 
 
+  LoadFontConfig(L);
 // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 // ╏ HANDLING APP FUNCTION ╏
 // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛

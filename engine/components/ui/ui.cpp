@@ -11,6 +11,7 @@
 #include "../color/color.h"
 #include "../vdom/vdom.h"
 #include "../text/font.h"
+#include "configLogic/font_registry.h"
 
 // global pointer for immediate mode
 RenderCommandList* activeCommandList = nullptr;
@@ -23,7 +24,9 @@ void UI_SetRenderCommandList(RenderCommandList* list) {
 void UI_RegisterLuaFunctions(lua_State *L) {
   lua_register(L, "load_font", l_load_font);
   lua_register(L, "text", l_draw_text);
-  
+  lua_register(L, "register_font_family", l_register_font_family);
+  lua_register(L, "unregister_font_family", l_unregister_font_family);
+
   luaL_newmetatable(L, "FontMeta");
   lua_pop(L, 1);
 }
@@ -78,6 +81,68 @@ TextAlign parseTextAlign(std::string s) {
   return TextAlign::Left;
 }
 
+void NodeParseText(Node* n, lua_State* L) {
+      lua_getfield(L, -1, "font");
+      if (lua_isuserdata(L, -1)) {
+        FontHandle* h = (FontHandle*)luaL_checkudata(L, -1, "FontMeta");
+        if (h) {
+          n->fontId = h->id;
+          n->font = UI_GetFontById(h->id);
+
+        }
+      }
+      lua_pop(L, 1);
+
+      lua_getfield(L, -1, "fontFamily");
+      if (lua_isstring(L, -1)) {
+        std::string alias = lua_tostring(L, -1);
+        const FontConfig* config = GetFontConfig(alias);
+        if (config) {
+          int size = config->size;
+          lua_getfield(L, -2, "fontSize");
+          if (lua_isnumber(L, -1)) {
+            size = (int)lua_tonumber(L, -1);
+          }
+          lua_pop(L, 1);
+        
+          auto [id, fontptr] = UI_LoadFont(config->path, size);
+          n->font = fontptr;
+          n->fontId = id;
+        } else {
+          std::cerr << "Warning: fontFamily '" << alias << "' not found in registry.\n";
+        }
+      }
+      lua_pop(L, 1);
+
+      lua_getfield(L, -1, "fontSize");
+      if (lua_isnumber(L, -1)) {
+        int newSize = (int)lua_tointeger(L, -1);
+        if (n->font && newSize > 0) {
+          auto [id, fontptr] = UI_LoadFont(n->font->GetPath(), newSize);
+          n->font = fontptr;
+          n->fontId = id;
+        }
+      }
+      lua_pop(L, 1);
+
+
+      lua_getfield(L, -1, "color");
+      if (lua_isstring(L, -1)) {
+        const char* hex = lua_tostring(L, -1);
+        SDL_Color sc = parseHexColor(hex);
+        n->textColor = {(uint8_t)sc.r, (uint8_t)sc.g, (uint8_t)sc.b, (uint8_t)sc.a};
+      }
+      else if (lua_istable(L, -1)) {
+        lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      }
+      lua_pop(L, 1);
+
+}
+
+
 Node* buildNode(lua_State* L, int idx) {
   luaL_checktype(L, idx, LUA_TTABLE);
 
@@ -130,46 +195,12 @@ Node* buildNode(lua_State* L, int idx) {
 
   if (hasStyle) {
     if (n->type == "text") {
-      lua_getfield(L, -1, "font");
-      if (lua_isuserdata(L, -1)) {
-        FontHandle* h = (FontHandle*)luaL_checkudata(L, -1, "FontMeta");
-        if (h) {
-          n->fontId = h->id;
-          n->font = UI_GetFontById(h->id);
-
-        }
-      }
-      lua_pop(L, 1);
-
-      lua_getfield(L, -1, "fontSize");
-      if (lua_isnumber(L, -1)) {
-        int newSize = (int)lua_tointeger(L, -1);
-        if (n->font && newSize > 0) {
-          auto [id, fontptr] = UI_LoadFont(n->font->GetPath(), newSize);
-          n->font = fontptr;
-          n->fontId = id;
-        }
-      }
-      lua_pop(L, 1);
-
-
-      lua_getfield(L, -1, "color");
-      if (lua_isstring(L, -1)) {
-        const char* hex = lua_tostring(L, -1);
-        SDL_Color sc = parseHexColor(hex);
-        n->textColor = {(uint8_t)sc.r, (uint8_t)sc.g, (uint8_t)sc.b, (uint8_t)sc.a};
-      }
-      else if (lua_istable(L, -1)) {
-        lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-      }
-      lua_pop(L, 1);
+      NodeParseText(n, L);
     }
 
-    n->widthStyle = getLength(L, "w");
-    n->heightStyle = getLength(L, "h");
+      n->widthStyle = getLength(L, "w");
+      n->heightStyle = getLength(L, "h");
+
   }
 
   n->spacing = getInt("gap", getInt("spacing", 0));
@@ -362,7 +393,7 @@ void generateRenderCommands(Node *n, RenderCommandList &list) {
     float cursorY = n->y + n->paddingTop + n->font->GetAscent();
 
     float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
-  
+
     for (const std::string& line : n->computedLines) {
 
       float lineWidth = 0;
@@ -412,6 +443,28 @@ void freeTree(lua_State* L, Node* n) {
   delete n;
 }
 
+//          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+//          ╏                     TEXT PROCESSING                     ╏
+//          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+
+static void appendCP(std::string& s, uint32_t cp) {
+  if (cp <= 0x7F) {
+        s += (char)cp;
+    } else if (cp <= 0x7FF) {
+        s += (char)(0xC0 | ((cp >> 6) & 0x1F));
+        s += (char)(0x80 | (cp & 0x3F));
+    } else if (cp <= 0xFFFF) {
+        s += (char)(0xE0 | ((cp >> 12) & 0x0F));
+        s += (char)(0x80 | ((cp >> 6) & 0x3F));
+        s += (char)(0x80 | (cp & 0x3F));
+    } else {
+        s += (char)(0xF0 | ((cp >> 18) & 0x07));
+        s += (char)(0x80 | ((cp >> 12) & 0x3F));
+        s += (char)(0x80 | ((cp >> 6) & 0x3F));
+        s += (char)(0x80 | (cp & 0x3F));
+    }
+}
+
 
 TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float maxWidth) {
   TextLayoutResult result;
@@ -422,34 +475,29 @@ TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float 
   if (maxWidth <= 0) maxWidth = 1;
 
   float lineHeight = (float)font->GetLineHeight();
-  float currentX = 0.0f;
   float currentY = lineHeight;
 
-  auto measureStr = [&](const std::string& str) -> float {
-    float w = 0;
-    for (char c : str) w += (font->GetCharacter(c).Advance >> 6);
-    return w;
-  };
+  std::vector<uint32_t> codepoints = Font::DecodeUTF8(text);
 
   std::string currentLine;
   float currentLineWidth = 0.0f;
   std::string word;
+  float wordWidth = 0.0f;
 
-  for (size_t i = 0; i <= text.size(); i++) {
-    char c = (i < text.size()) ? text[i] : 0;
+  for (size_t i = 0; i <= codepoints.size(); i++) {
+    uint32_t c = (i < codepoints.size()) ? codepoints[i] : 0;
 
     if (c == ' ' || c == '\n' || c == 0) {
-      float wordW = measureStr(word);
-      float spaceW = (c == ' ') ? measureStr(" ") : 0;
+      float spaceW = (c == ' ') ? (font->GetCharacter(' ').Advance / 64.0f) : 0;
 
-      if (currentLineWidth + wordW <= maxWidth) {
+      if (currentLineWidth + wordWidth <= maxWidth) {
         currentLine += word;
-        currentLineWidth += wordW;
+        currentLineWidth += wordWidth;
       } else {
         result.lines.push_back(currentLine);
         result.width = std::max(result.width, currentLineWidth); // Track max width
         currentLine = word;
-        currentLineWidth = wordW;
+        currentLineWidth = wordWidth;
         currentY += lineHeight;
       }
 
@@ -464,8 +512,10 @@ TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float 
         currentY += lineHeight;
       }
       word.clear();
+      wordWidth = 0;
     } else {
-      word += c;
+      appendCP(word, c);
+      wordWidth += (font->GetCharacter(c).Advance / 64.0f);
     }
   }
   if (!currentLine.empty()) {
