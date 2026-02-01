@@ -7,7 +7,7 @@ dist/
 Debug/
 Release/
 assets/*
-config*
+config/*
 !assets/.gitkeep
 !config/.gitkeep
 
