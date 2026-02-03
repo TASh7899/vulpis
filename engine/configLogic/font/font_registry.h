@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
-#include "../../../lua.hpp"
+#include "../lua.hpp"
+
 
 struct FontConfig {
   std::string path;

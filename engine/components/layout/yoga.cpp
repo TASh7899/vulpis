@@ -57,6 +57,12 @@ namespace Layout {
         YGNodeRef yogaNode = YGNodeNew();
         YGNodeSetContext(yogaNode, n);
 
+        if (n->position == PositionType::Absolute) {
+          YGNodeStyleSetPositionType(yogaNode, YGPositionTypeAbsolute);
+        } else {
+          YGNodeStyleSetPositionType(yogaNode, YGPositionTypeRelative);
+        }
+
         if (n->type == "text") {
           YGNodeSetMeasureFunc(yogaNode, textMeasure);
           YGNodeStyleSetFlexShrink(yogaNode, 0.0f);

@@ -44,7 +44,8 @@ add_executable(vulpis
   engine/components/renderer/opengl_renderer.cpp
   engine/components/text/font.cpp
   engine/components/system/pathUtils.cpp
-  engine/components/ui/configLogic/font_registry.cpp
+  engine/configLogic/font/font_registry.cpp
+  engine/configLogic/engineConf/engine_config.cpp
 )
 
 target_link_libraries(vulpis PRIVATE
@@ -67,20 +68,21 @@ target_include_directories(vulpis PRIVATE
 
 set(ASSETS_SOURCE "${CMAKE_SOURCE_DIR}/assets")
 set(ASSETS_DEST "${CMAKE_BINARY_DIR}/assets")
+set(FONTS_SOURCE "${CMAKE_SOURCE_DIR}/third_party/NotoSans")
+set(FONTS_DEST "${CMAKE_BINARY_DIR}/builtin/NotoSans")
 
 if (WIN32)
   add_custom_target(SyncAssets ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${ASSETS_SOURCE}
-    ${ASSETS_DEST}
-    COMMENT "Syncing assets to build directory..."
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${ASSETS_SOURCE} ${ASSETS_DEST}
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${FONTS_SOURCE} ${FONTS_DEST} # Copy Fonts
+    COMMENT "Syncing assets and fonts..."
   )
 else()
   add_custom_target(SyncAssets ALL
-    COMMAND ${CMAKE_COMMAND} -E create_symlink
-    ${ASSETS_SOURCE}
-    ${ASSETS_DEST}
-    COMMENT "Ensuring assets symlink exists..."
+    COMMAND ${CMAKE_COMMAND} -E create_symlink ${ASSETS_SOURCE} ${ASSETS_DEST}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${FONTS_DEST}
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${FONTS_SOURCE} ${FONTS_DEST}
+    COMMENT "Ensuring assets symlink and fonts exist..."
   )
 endif()
 add_dependencies(vulpis SyncAssets)

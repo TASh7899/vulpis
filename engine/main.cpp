@@ -3,6 +3,8 @@
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_video.h>
+#include <SDL_stdinc.h>
+#include <SDL_timer.h>
 #include <iostream>
 #include <ostream>
 #include <string>
@@ -15,8 +17,19 @@
 #include "components/state/state.h"
 #include "components/input/input.h"
 #include "components/vdom/vdom.h"
-#include "components/ui/configLogic/font_registry.h"
+#include "configLogic/font/font_registry.h"
 
+int protected_buildNode(lua_State* L) {
+  Node* root = buildNode(L, 1);
+  lua_pushlightuserdata(L, root);
+  return 1;
+}
+
+int protected_reconcile(lua_State* L) {
+  Node* root = (Node*)lua_touserdata(L, 1);
+  VDOM::reconcile(L, root, 2);
+  return 0;
+}
 
 int main(int argc, char* argv[]) {
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
@@ -194,13 +207,25 @@ lua_pop(L, 1);
       return 1;
   }
 
-  Node* root = buildNode(L, -1);
-  lua_pop(L, 1);
+  Node* root = nullptr;
+  lua_pushcfunction(L, protected_buildNode);
+  lua_pushvalue(L, -2);
+
+  if (lua_pcall(L, 1, 1, 0) != LUA_OK) {
+    std::cerr << "CRITICAL VDOM ERROR: " << lua_tostring(L, -1) << std::endl;
+    return 1;
+  }
+
+  if (lua_islightuserdata(L, -1)) {
+    root = (Node*)lua_touserdata(L, -1);
+  }
+  lua_pop(L, 1); // Pop lightuserdata
+  lua_pop(L, 1); // Pop App
 
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ LAYOUT SOLVER CREATION ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  // ╏ LAYOUT SOLVER CREATION ╏
+  // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   Layout::LayoutSolver* solver = Layout::createYogaSolver();
   solver->solve(root, {winW, winH});
   updateTextLayout(root);
@@ -210,12 +235,31 @@ lua_pop(L, 1);
   bool running = true;
   SDL_Event event;
 
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ INITIALIZED TIME ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+Uint32 lastTime = SDL_GetTicks();
 
-
-//          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-//          ╏                    MAIN PROGRAM LOOP                    ╏
-//          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  //          ╏                    MAIN PROGRAM LOOP                    ╏
+  //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   while (running) {
+
+    Uint32 currentTime = SDL_GetTicks();
+    float dt = (currentTime - lastTime) / 1000.0f;
+    lastTime = currentTime;
+
+    lua_getglobal(L, "on_tick");
+    if (lua_isfunction(L, -1)) {
+      lua_pushnumber(L, dt);
+      if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+        std::cerr << "on_tick Error " << lua_tostring(L, -1) << std::endl;
+        lua_pop(L, 1);
+      }
+    } else {
+      lua_pop(L, 1);
+    }
+
     // HANDLING SDL EVENTS
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_QUIT) {
@@ -231,29 +275,41 @@ lua_pop(L, 1);
       }
     }
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ RECONCILE TREE IF DIRTY ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+    // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+    // ╏ RECONCILE TREE IF DIRTY ╏
+    // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
     if (StateManager::instance().isDirty()) {
       lua_getglobal(L, "App");
-      if (!lua_isfunction(L, -1)) {
-        std::cerr << "Error: App is not a function during reconcile" << std::endl;
-        lua_pop(L, 1);
-      } else {
-
+      if (lua_isfunction(L, -1)) {
         if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
-          std::cerr << "Error calling App(): "
-            << lua_tostring(L, -1) << std::endl;
+          std::cerr << "App Update Error: " << lua_tostring(L, -1) << std::endl;
           lua_pop(L, 1);
         } else {
+          // App table is at top of stack (-1)
+          
+          if (lua_istable(L, -1)) {
+             // PROTECTED RECONCILE
+             lua_pushcfunction(L, protected_reconcile);
+             lua_pushlightuserdata(L, root); // Arg 1: Root
+             lua_pushvalue(L, -3);           // Arg 2: App Table (copy from -3)
 
-          VDOM::reconcile(L, root, -1);
-          lua_pop(L, 1);
+             if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+                // Now, if an error happens here, it prints gracefully!
+                std::cerr << "VDOM Reconcile Error: " << lua_tostring(L, -1) << std::endl;
+                lua_pop(L, 1); // Pop error
+             }
+          } else {
+             std::cerr << "Error: App() returned non-table during update" << std::endl;
+          }
+
+          lua_pop(L, 1); // Pop App table
         }
+      } else {
+        lua_pop(L, 1);
       }
-
       StateManager::instance().clearDirty();
     }
+
 
     if (root->isLayoutDirty) {
       solver->solve(root, {winW, winH});
@@ -266,9 +322,9 @@ lua_pop(L, 1);
     generateRenderCommands(root, cmdList);
     UI_SetRenderCommandList(&cmdList);
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ on_render() FUNCTION ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+    // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+    // ╏ on_render() FUNCTION ╏
+    // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
     lua_getglobal(L, "on_render");
     if (lua_isfunction(L, -1)) {
       if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
@@ -284,7 +340,7 @@ lua_pop(L, 1);
     renderer.submit(cmdList);
     renderer.endFrame();
   }
-  
+
   UI_ShutdownFonts();
   freeTree(L, root);
   SDL_DestroyWindow(window);

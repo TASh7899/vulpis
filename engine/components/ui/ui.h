@@ -64,6 +64,11 @@ inline Length pct(float v) {
   return Length::Percent(v);
 }
 
+enum class PositionType {
+  Relative,
+  Absolute
+};
+
 struct Node {
   std::string type;
   std::string key;
@@ -125,6 +130,8 @@ struct Node {
       parent->makeLayoutDirty();
     }
   }
+
+  PositionType position = PositionType::Relative;
 };
 
 
