@@ -79,6 +79,15 @@ struct Node {
   Font* font = nullptr;
   Color textColor = {255, 255, 255, 255};
 
+  std::string fontFamily;
+  int fontSize = 0;
+  FontStyle fontStyle = FontStyle::Normal;
+  FontWeight fontWeight = FontWeight::Normal;
+  TextDecoration textDecoration = TextDecoration::None;
+
+  bool loadedVariantBold = false;
+  bool loadedVariantItalic = false;
+
   TextAlign textAlign = TextAlign::Left;
 
   std::vector<std::string> computedLines;
@@ -165,3 +174,10 @@ void updateTextLayout(Node* root);
 extern RenderCommandList* activeCommandList;
 
 void UI_SetRenderCommandList(RenderCommandList* list);
+
+
+
+FontStyle parseFontStyle(const std::string& s);
+FontWeight parseFontWeight(const std::string& s);
+TextDecoration parseTextDecoration(const std::string& s);
+std::string getVariantKey(FontWeight w, FontStyle s);

@@ -1,6 +1,7 @@
 #include "opengl_renderer.h"
 #include "commands.h"
 #include <SDL_video.h>
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -48,9 +49,9 @@ OpenGLRenderer::OpenGLRenderer(SDL_Window* win) : window(win) {
   }
 
   std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
-
   SDL_GL_SetSwapInterval(1);
   glEnable(GL_BLEND);
+  glEnable(GL_MULTISAMPLE);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   initShaders();
   initBuffers();
@@ -150,7 +151,7 @@ void OpenGLRenderer::flush() {
   if (vertices.empty()) return;
 
   glBindTexture(GL_TEXTURE_2D, currentTextureID);
-  
+
   glBindVertexArray(vao);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
@@ -190,6 +191,24 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
 
     else if (std::holds_alternative<DrawTextCommand>(cmd)) {
       const auto& data = std::get<DrawTextCommand>(cmd);
+      if (!data.font) continue;
+
+      float fSize = (float)data.font->GetSize();
+
+      float boldOffset = (data.weight >= FontWeight::Bold) ? std::max(1.0f, fSize/48.0f) : 0.0f;
+      bool useFakeBold = (boldOffset > 0.0f);
+
+      float italicSkew = (data.style == FontStyle::Italics) ? 0.20f : 0.0f;
+      float underlineY = data.y + (fSize*0.1f);
+      float strikeThroughY = data.y - (data.font->GetAscent() * 0.4f);
+
+      float decorationThickness;
+      if (data.decoration == TextDecoration::StrikeThrough) {
+        decorationThickness = std::max(1.0f, fSize / 14.0f);
+      } else {
+        decorationThickness = std::max(1.0f, fSize/24.0f);
+      }
+
       GLuint fontTex = data.font->GetTextureID();
 
       if (currentTextureID != fontTex) {
@@ -199,6 +218,7 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
 
       float cursorX = data.x;
       float cursorY = data.y;
+      float textStartX = cursorX;
 
       std::vector<uint32_t> codepoints = Font::DecodeUTF8(data.text);
 
@@ -215,19 +235,56 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         float w = (float)ch.SizeX;
         float h = (float)ch.SizeY;
 
-        // triangle 1
-        vertices.push_back({ xpos + w, ypos, ch.uMax, ch.vMax, data.color });
-        vertices.push_back({ xpos + w, ypos - h, ch.uMax, ch.vMin, data.color });
-        vertices.push_back({ xpos, ypos - h, ch.uMin, ch.vMin, data.color});
+        float skewOffset = h * italicSkew;
 
-        // triangle 2
-        vertices.push_back({ xpos, ypos - h, ch.uMin, ch.vMin, data.color });
-        vertices.push_back({ xpos, ypos, ch.uMin, ch.vMax, data.color });
-        vertices.push_back({ xpos + w, ypos, ch.uMax, ch.vMax, data.color });
+        auto pushGlyphQuad = [&](float offsetX) {
+          float left   = xpos + offsetX;
+          float right  = xpos + w + offsetX;
+          float top    = ypos - h;
+          float bottom = ypos;
 
-        // freetype stores advance values as 26.6 fixed point, meaning the value is scaled by 64, we divide by 64 to get pixels.
-        // this is just a faster way to divide by 64
+          // Triangle 1 (Top-Right -> Bottom-Right -> Bottom-Left)
+          vertices.push_back({ right + skewOffset, top,    ch.uMax, ch.vMin, data.color });
+          vertices.push_back({ right,              bottom, ch.uMax, ch.vMax, data.color });
+          vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
+
+          // Triangle 2 (Bottom-Left -> Top-Left -> Top-Right)
+          vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
+          vertices.push_back({ left + skewOffset,  top,    ch.uMin, ch.vMin, data.color });
+          vertices.push_back({ right + skewOffset, top,    ch.uMax, ch.vMin, data.color });
+        };
+
+        pushGlyphQuad(0.0f);
+
+        if (useFakeBold) {
+          pushGlyphQuad(boldOffset);
+        }
+
         cursorX += (ch.Advance >> 6);
+      }
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ LOGIC FOR UNDERLINE OR STRIKE LINE ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+      if (data.decoration != TextDecoration::None) {
+        if (currentTextureID != whiteTexture) {
+          flush();
+          currentTextureID = whiteTexture;
+        }
+
+        float width = cursorX - textStartX;
+        float lineY = (data.decoration == TextDecoration::Underline) ? underlineY : strikeThroughY;
+
+        // triangle 1
+        vertices.push_back({ textStartX + width, lineY,                       0.0f, 0.0f, data.color }); // TR
+        vertices.push_back({ textStartX + width, lineY + decorationThickness, 0.0f, 0.0f, data.color }); // BR
+        vertices.push_back({ textStartX,         lineY + decorationThickness, 0.0f, 0.0f, data.color }); // BL
+
+        // Triangle 2
+        vertices.push_back({ textStartX,         lineY + decorationThickness, 0.0f, 0.0f, data.color }); // BL
+        vertices.push_back({ textStartX,         lineY,                       0.0f, 0.0f, data.color }); // TL
+        vertices.push_back({ textStartX + width, lineY,                       0.0f, 0.0f, data.color }); // TR
+
       }
     }
 

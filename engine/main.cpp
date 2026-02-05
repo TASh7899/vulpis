@@ -42,6 +42,9 @@ int main(int argc, char* argv[]) {
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 
+  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+
   int winW = 800;
   int winH = 600;
 
@@ -57,9 +60,9 @@ int main(int argc, char* argv[]) {
   lua_getfield(L, -1, "path");
   std::string paths = lua_tostring(L, -1);
   lua_pop(L, 1);
-  
 
-paths =
+
+  paths =
     "../?.lua;"
     "../?/init.lua;"
 
@@ -85,10 +88,10 @@ paths =
   }
 
 
-//          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-//          ╏                    [WINDOW SECTION]                     ╏
-//          ╏               WINDOW CONFIG AND CREATION                ╏
-//          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  //          ╏                    [WINDOW SECTION]                     ╏
+  //          ╏               WINDOW CONFIG AND CREATION                ╏
+  //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
 
   std::string title = "Vulpis window";
   std::string mode = "";
@@ -135,11 +138,11 @@ paths =
   } else {
     std::cerr << "WARNING: Window() not declared, using default settings" << std::endl;
   }
-lua_pop(L, 1);
+  lua_pop(L, 1);
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ WINDOW FLAGS ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  // ╏ WINDOW FLAGS ╏
+  // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   int windowFlags = SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI;
 
   if (resizable) {
@@ -154,13 +157,13 @@ lua_pop(L, 1);
   }
 
   window = SDL_CreateWindow(
-    title.c_str(),
-    SDL_WINDOWPOS_CENTERED,
-    SDL_WINDOWPOS_CENTERED,
-    w,
-    h,
-    windowFlags
-  );
+      title.c_str(),
+      SDL_WINDOWPOS_CENTERED,
+      SDL_WINDOWPOS_CENTERED,
+      w,
+      h,
+      windowFlags
+      );
 
   if (!window) {
     std::cout << "Window Creation Failed: " << SDL_GetError() << std::endl;
@@ -169,42 +172,42 @@ lua_pop(L, 1);
   }
   SDL_GetWindowSize(window, &winW, &winH);
 
-//          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-//          ╏                  END OF WINDOW SECTION                  ╏
-//          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  //          ╏                  END OF WINDOW SECTION                  ╏
+  //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
 
 
 
 
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ INITIALIZING RENDERER ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  // ╏ INITIALIZING RENDERER ╏
+  // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   OpenGLRenderer renderer(window);
 
 
   LoadFontConfig(L);
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ HANDLING APP FUNCTION ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  // ╏ HANDLING APP FUNCTION ╏
+  // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   lua_getglobal(L, "App");
   if (!lua_isfunction(L, -1)) {
-      std::cerr << "Error: Global 'App' function not found in app.lua" << std::endl;
-      return 1;
+    std::cerr << "Error: Global 'App' function not found in app.lua" << std::endl;
+    return 1;
   }
 
   // 2. Call App()
   if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
-      std::cerr << "Error calling App(): " << lua_tostring(L, -1) << std::endl;
-      lua_pop(L, 1);
-      return 1;
+    std::cerr << "Error calling App(): " << lua_tostring(L, -1) << std::endl;
+    lua_pop(L, 1);
+    return 1;
   }
 
   // 3. Now the return value is on stack
   if (!lua_istable(L, -1)) {
-      std::cerr << "Error: App() did not return a table" << std::endl;
-      lua_pop(L, 1);
-      return 1;
+    std::cerr << "Error: App() did not return a table" << std::endl;
+    lua_pop(L, 1);
+    return 1;
   }
 
   Node* root = nullptr;
@@ -235,10 +238,10 @@ lua_pop(L, 1);
   bool running = true;
   SDL_Event event;
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ INITIALIZED TIME ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
-Uint32 lastTime = SDL_GetTicks();
+  // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  // ╏ INITIALIZED TIME ╏
+  // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  Uint32 lastTime = SDL_GetTicks();
 
   //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
   //          ╏                    MAIN PROGRAM LOOP                    ╏
@@ -286,20 +289,20 @@ Uint32 lastTime = SDL_GetTicks();
           lua_pop(L, 1);
         } else {
           // App table is at top of stack (-1)
-          
-          if (lua_istable(L, -1)) {
-             // PROTECTED RECONCILE
-             lua_pushcfunction(L, protected_reconcile);
-             lua_pushlightuserdata(L, root); // Arg 1: Root
-             lua_pushvalue(L, -3);           // Arg 2: App Table (copy from -3)
 
-             if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
-                // Now, if an error happens here, it prints gracefully!
-                std::cerr << "VDOM Reconcile Error: " << lua_tostring(L, -1) << std::endl;
-                lua_pop(L, 1); // Pop error
-             }
+          if (lua_istable(L, -1)) {
+            // PROTECTED RECONCILE
+            lua_pushcfunction(L, protected_reconcile);
+            lua_pushlightuserdata(L, root); // Arg 1: Root
+            lua_pushvalue(L, -3);           // Arg 2: App Table (copy from -3)
+
+            if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+              // Now, if an error happens here, it prints gracefully!
+              std::cerr << "VDOM Reconcile Error: " << lua_tostring(L, -1) << std::endl;
+              lua_pop(L, 1); // Pop error
+            }
           } else {
-             std::cerr << "Error: App() returned non-table during update" << std::endl;
+            std::cerr << "Error: App() returned non-table during update" << std::endl;
           }
 
           lua_pop(L, 1); // Pop App table

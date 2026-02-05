@@ -13,11 +13,18 @@ struct Rect {
   float x, y, w, h;
 };
 
+enum class FontStyle { Normal, Italics };
+enum class FontWeight { VeryThin, Thin, Normal, SemiBold, Bold, VeryBold };
+enum class TextDecoration { None, Underline, StrikeThrough };
+
 struct DrawTextCommand {
   std::string text;
   Font* font;
   float x, y;
   Color color;
+  FontStyle style = FontStyle::Normal;
+  FontWeight weight = FontWeight::Normal;
+  TextDecoration decoration = TextDecoration::None;
 };
 
 struct DrawRectCommand {
