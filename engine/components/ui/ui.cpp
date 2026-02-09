@@ -23,6 +23,31 @@ void UI_SetRenderCommandList(RenderCommandList* list) {
 }
 
 
+int GetFontFlagsFromNode(Node* n) {
+  int flags = FONT_STYLE_NORMAL;
+
+  if (n->fontWeight == FontWeight::VeryBold) {
+    flags |= FONT_STYLE_VERY_BOLD;
+  }
+  else if (n->fontWeight == FontWeight::Bold) {
+    flags |= FONT_STYLE_BOLD;
+  }
+  else if (n->fontWeight == FontWeight::SemiBold) {
+    flags |= FONT_STYLE_SEMI_BOLD;
+  }
+  else if (n->fontWeight == FontWeight::Thin) {
+    flags |= FONT_STYLE_THIN;
+  }
+
+  if (n->fontStyle == FontStyle::Italics) {
+    flags |= FONT_STYLE_ITALIC;
+  }
+
+  return flags;
+}
+
+
+
 void UI_RegisterLuaFunctions(lua_State *L) {
   lua_register(L, "load_font", l_load_font);
   lua_register(L, "text", l_draw_text);
@@ -35,45 +60,45 @@ void UI_RegisterLuaFunctions(lua_State *L) {
 
 
 Align parseAlign(std::string s) {
-    if (s == "center") return Align::Center;
-    if (s == "end") return Align::End;
-    if (s == "stretch") return Align::Stretch;
-    return Align::Start;
+  if (s == "center") return Align::Center;
+  if (s == "end") return Align::End;
+  if (s == "stretch") return Align::Stretch;
+  return Align::Start;
 }
 
 Justify parseJustify(std::string s) {
-    if (s == "center") return Justify::Center;
-    if (s == "end") return Justify::End;
-    if (s == "space-around") return Justify::SpaceAround;
-    if (s == "space-between") return Justify::SpaceBetween;
-    if (s == "space-evenly") return Justify::SpaceEvenly;
-    return Justify::Start;
+  if (s == "center") return Justify::Center;
+  if (s == "end") return Justify::End;
+  if (s == "space-around") return Justify::SpaceAround;
+  if (s == "space-between") return Justify::SpaceBetween;
+  if (s == "space-evenly") return Justify::SpaceEvenly;
+  return Justify::Start;
 }
 
 Length getLength(lua_State* L, const char* key) {
-    Length len;
-    lua_getfield(L, -1, key);
+  Length len;
+  lua_getfield(L, -1, key);
 
-    if (lua_isnumber(L, -1)) {
-        len.value = (float)lua_tonumber(L, -1);
-        len.type = PIXEL;
+  if (lua_isnumber(L, -1)) {
+    len.value = (float)lua_tonumber(L, -1);
+    len.type = PIXEL;
+  }
+  else if (lua_isstring(L, -1)) {
+    std::string s = lua_tostring(L, -1);
+    if (!s.empty() && s.back() == '%') {
+      try {
+        float val = std::stof(s.substr(0, s.size() - 1));
+        len = Length::Percent(val);
+      } catch (...) {
+        len = Length(0);
+      }
+    } else {
+      len = Length(0);
     }
-    else if (lua_isstring(L, -1)) {
-        std::string s = lua_tostring(L, -1);
-        if (!s.empty() && s.back() == '%') {
-            try {
-                float val = std::stof(s.substr(0, s.size() - 1));
-                len = Length::Percent(val);
-            } catch (...) {
-                len = Length(0);
-            }
-        } else {
-             len = Length(0);
-        }
-    }
-    
-    lua_pop(L, 1);
-    return len;
+  }
+
+  lua_pop(L, 1);
+  return len;
 }
 
 TextAlign parseTextAlign(std::string s) {
@@ -84,23 +109,22 @@ TextAlign parseTextAlign(std::string s) {
 }
 
 FontStyle parseFontStyle(const std::string& s) {
-    if (s == "italics") return FontStyle::Italics;
-    return FontStyle::Normal;
+  if (s == "italics") return FontStyle::Italics;
+  return FontStyle::Normal;
 }
 
 FontWeight parseFontWeight(const std::string& s) {
-    if (s == "very-thin") return FontWeight::VeryThin;
-    if (s == "thin")      return FontWeight::Thin;
-    if (s == "semi-bold") return FontWeight::SemiBold;
-    if (s == "bold")      return FontWeight::Bold;
-    if (s == "very-bold") return FontWeight::VeryBold;
-    return FontWeight::Normal;
+  if (s == "thin")      return FontWeight::Thin;
+  if (s == "semi-bold") return FontWeight::SemiBold;
+  if (s == "bold")      return FontWeight::Bold;
+  if (s == "very-bold") return FontWeight::VeryBold;
+  return FontWeight::Normal;
 }
 
 TextDecoration parseTextDecoration(const std::string& s) {
-    if (s == "underline")      return TextDecoration::Underline;
-    if (s == "strike-through") return TextDecoration::StrikeThrough;
-    return TextDecoration::None;
+  if (s == "underline")      return TextDecoration::Underline;
+  if (s == "strike-through") return TextDecoration::StrikeThrough;
+  return TextDecoration::None;
 }
 
 std::string getVariantKey(FontWeight w, FontStyle s) {
@@ -112,6 +136,15 @@ std::string getVariantKey(FontWeight w, FontStyle s) {
   if (s == FontStyle::Italics) return "italics";
   return "";
 }
+
+int getFlags(Node* node) {
+  int flags = GetFontFlagsFromNode(node);
+  if (node->loadedVariantBold) flags &= ~(FONT_STYLE_BOLD | FONT_STYLE_SEMI_BOLD | FONT_STYLE_VERY_BOLD);
+  if (node->loadedVariantItalic) flags &= ~FONT_STYLE_ITALIC;
+  if (node->loadedVariantThin) flags &= ~FONT_STYLE_THIN;
+  return flags;
+};
+
 
 void NodeParseText(Node* n, lua_State* L) {
   lua_getfield(L, -1, "fontStyle");
@@ -133,10 +166,11 @@ void NodeParseText(Node* n, lua_State* L) {
     if (h) {
       n->fontId = h->id;
       n->font = UI_GetFontById(h->id);
-
     }
   }
   lua_pop(L, 1);
+
+
 
   lua_getfield(L, -1, "fontFamily");
   if (lua_isstring(L, -1)) {
@@ -156,6 +190,7 @@ void NodeParseText(Node* n, lua_State* L) {
 
       n->loadedVariantBold = false;
       n->loadedVariantItalic = false;
+      n->loadedVariantThin = false;
 
       if (!vKey.empty() && config->variants.count(vKey)) {
         const VariantConfig& v = config->variants.at(vKey);
@@ -167,10 +202,14 @@ void NodeParseText(Node* n, lua_State* L) {
           n->loadedVariantItalic = true;
         }
         else if (vKey == "bold" || vKey == "semi-bold") {
-            n->loadedVariantBold = true;
+          n->loadedVariantBold = true;
         }
         else if (vKey == "italics") {
-            n->loadedVariantItalic = true;
+          n->loadedVariantItalic = true;
+        }
+
+        else if (vKey == "thin") {
+          n->loadedVariantThin = true;
         }
 
         if (n->fontSize <= 0 && v.size > 0) {
@@ -178,7 +217,7 @@ void NodeParseText(Node* n, lua_State* L) {
         }
       }
 
-      auto [id, fontptr] = UI_LoadFont(targetPath, size);
+      auto [id, fontptr] = UI_LoadFont(targetPath, size, getFlags(n));
       n->font = fontptr;
       n->fontId = id;
     } else {
@@ -203,12 +242,17 @@ void NodeParseText(Node* n, lua_State* L) {
       if (!vKey.empty() && config->variants.count(vKey)) {
         const VariantConfig& v = config->variants.at(vKey);
         targetPath = v.path;
+
+        if (vKey.find("bold") != std::string::npos) n->loadedVariantBold = true;
+        if (vKey.find("italics") != std::string::npos) n->loadedVariantItalic = true;
+        if (vKey.find("thin") != std::string::npos) n->loadedVariantThin = true;
+
         if (n->fontSize <= 0 && v.size > 0) {
           size = v.size;
         }
       }
 
-      auto [id, fontptr] = UI_LoadFont(targetPath, size);
+      auto [id, fontptr] = UI_LoadFont(targetPath, size, getFlags(n));
       n->font = fontptr;
       n->fontId = id;
     } else {
@@ -225,7 +269,7 @@ void NodeParseText(Node* n, lua_State* L) {
   if (lua_isnumber(L, -1)) {
     int newSize = (int)lua_tointeger(L, -1);
     if (n->font && newSize > 0 && n->font->GetSize() != newSize) {
-      auto [id, fontptr] = UI_LoadFont(n->font->GetPath(), newSize);
+      auto [id, fontptr] = UI_LoadFont(n->font->GetPath(), newSize, getFlags(n));
       n->font = fontptr;
       n->fontId = id;
     }
@@ -518,9 +562,7 @@ void generateRenderCommands(Node *n, RenderCommandList &list) {
       }
 
       list.push(DrawTextCommand{line, n->font, startX + xOffset, cursorY, n->textColor,
-      n->loadedVariantItalic ? FontStyle::Normal : n->fontStyle,
-      n->loadedVariantBold ? FontWeight::Normal : n->fontWeight,
-      n->textDecoration});
+          n->textDecoration});
       cursorY += n->computedLineHeight;
     }
   }
@@ -661,5 +703,6 @@ void updateTextLayout(Node* root) {
     updateTextLayout(c);
   }
 }
+
 
 

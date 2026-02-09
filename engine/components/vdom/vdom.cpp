@@ -122,6 +122,21 @@ namespace VDOM {
       std::string fDecorStr = getStringProp(L, "textDecoration", "none");
       update(n->textDecoration, parseTextDecoration(fDecorStr), paintChanged);
 
+      auto getFlags = [](Node* n) {
+        int flags = FONT_STYLE_NORMAL;
+        if (n->fontWeight == FontWeight::VeryBold) flags |= FONT_STYLE_VERY_BOLD;
+        else if (n->fontWeight == FontWeight::Bold) flags |= FONT_STYLE_BOLD;
+        else if (n->fontWeight == FontWeight::SemiBold) flags |= FONT_STYLE_SEMI_BOLD;
+        else if (n->fontWeight == FontWeight::Thin) flags |= FONT_STYLE_THIN;
+        if (n->fontStyle == FontStyle::Italics) flags |= FONT_STYLE_ITALIC;
+
+        // Don't apply fake styles if real variants were loaded
+        if (n->loadedVariantBold) flags &= ~(FONT_STYLE_BOLD | FONT_STYLE_SEMI_BOLD | FONT_STYLE_VERY_BOLD);
+        if (n->loadedVariantItalic) flags &= ~FONT_STYLE_ITALIC;
+        if (n->loadedVariantThin) flags &= ~FONT_STYLE_THIN;
+        return flags;
+      };
+
       lua_getfield(L, -1, "font");
       if (lua_isuserdata(L, -1)) {
         FontHandle* h = (FontHandle*)luaL_checkudata(L, -1, "FontMeta");
@@ -154,7 +169,7 @@ namespace VDOM {
           lua_pop(L, 1);
 
           // Load/Get the font from the cache
-          auto [id, fontPtr] = UI_LoadFont(config->path, targetSize);
+          auto [id, fontPtr] = UI_LoadFont(config->path, targetSize, getFlags(n));
 
           // If the resolved font is different, update the node
           if (n->font != fontPtr) {
@@ -184,7 +199,7 @@ namespace VDOM {
           if (lua_isnumber(L, -1)) targetSize = (int)lua_tonumber(L, -1);
           lua_pop(L, 1);
 
-          auto [id, fontPtr] = UI_LoadFont(config->path, targetSize);
+          auto [id, fontPtr] = UI_LoadFont(config->path, targetSize, getFlags(n));
           if (n->font != fontPtr) {
             n->font = fontPtr;
             n->fontId = id;
@@ -206,7 +221,7 @@ namespace VDOM {
 
         // If the size changed, we need to request a new font handle from the cache
         if (n->font && newSize > 0 && (int)n->font->GetSize() != newSize) {
-          auto [id, fontPtr] = UI_LoadFont(n->font->GetPath(), newSize);
+          auto [id, fontPtr] = UI_LoadFont(n->font->GetPath(), newSize, getFlags(n));
 
           if (n->font != fontPtr) {
             n->font = fontPtr;
@@ -241,11 +256,14 @@ namespace VDOM {
           else if (vkey == "italics") {
             n->loadedVariantItalic = true;
           }
+          else if (vkey == "thin") {
+            n->loadedVariantThin = true;
+          }
 
           if (n->fontSize <= 0 && v.size > 0) targetSize = v.size;
         }
 
-        auto [id, fontPtr] = UI_LoadFont(targetPath, targetSize);
+        auto [id, fontPtr] = UI_LoadFont(targetPath, targetSize, getFlags(n));
         if (n->font != fontPtr) {
           n->font = fontPtr;
           n->fontId = id;

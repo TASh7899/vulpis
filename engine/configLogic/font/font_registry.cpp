@@ -26,7 +26,7 @@ static void RebuildFallbackList() {
   for (const auto& [alias, config] : g_fontRegistry) {
     if (config.fallback) {
       std::string fullpath = config.path;
-      auto [id, fontptr] = UI_LoadFont(fullpath, config.size);
+      auto [id, fontptr] = UI_LoadFont(fullpath, config.size, FONT_STYLE_NORMAL);
       if (fontptr) {
         Font::AddFallback(fontptr);
       }

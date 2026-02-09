@@ -22,8 +22,6 @@ struct DrawTextCommand {
   Font* font;
   float x, y;
   Color color;
-  FontStyle style = FontStyle::Normal;
-  FontWeight weight = FontWeight::Normal;
   TextDecoration decoration = TextDecoration::None;
 };
 

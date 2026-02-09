@@ -87,6 +87,7 @@ struct Node {
 
   bool loadedVariantBold = false;
   bool loadedVariantItalic = false;
+  bool loadedVariantThin = false;
 
   TextAlign textAlign = TextAlign::Left;
 
@@ -181,3 +182,7 @@ FontStyle parseFontStyle(const std::string& s);
 FontWeight parseFontWeight(const std::string& s);
 TextDecoration parseTextDecoration(const std::string& s);
 std::string getVariantKey(FontWeight w, FontStyle s);
+
+int getFlags(Node* node);
+
+

@@ -2,6 +2,7 @@
 #include <SDL_gamecontroller.h>
 #include <algorithm>
 #include <cstdint>
+#include <freetype/fttypes.h>
 #include <iostream>
 #include <ft2build.h>
 #include <lauxlib.h>
@@ -12,6 +13,7 @@
 #include <vector>
 #include "../ui/ui.h"
 #include FT_FREETYPE_H
+#include FT_OUTLINE_H
 
 #include "../system/pathUtils.h"
 
@@ -90,13 +92,16 @@ Font* UI_GetFontById(int id) {
 //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 //          ╏                 FONT CLASS CONSTRUCTORS                 ╏
 //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
-Font::Font(const std::string& fontPath, unsigned int fontSize) : 
-  textureID(0), lineHeight(0), ascent(0), fontPath(fontPath), fontSize(fontSize) {
+Font::Font(const std::string& fontPath, unsigned int fontSize, int styleFlags) : 
+  textureID(0), lineHeight(0), ascent(0), fontPath(fontPath), fontSize(fontSize), styleFlags(styleFlags) {
   Load(fontPath, fontSize);
 }
 
 Font::~Font() {
   glDeleteTextures(1, &textureID);
+  if (ftFace) {
+    FT_Done_Face((FT_Face)ftFace);
+  }
 }
 
 
@@ -106,15 +111,15 @@ Font::~Font() {
 // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 // ╏ MAIN FUNCTION TO GET FONT POINTER AND ITS ID FROM GLOBAL FONT STORAGE ╏
 // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
-std::pair<int, Font*> UI_LoadFont(const std::string &path, int size) {
+std::pair<int, Font*> UI_LoadFont(const std::string &path, int size, int styleFlags) {
   for (const auto& [id, font] : g_fonts ) {
-    if (font->GetPath() == path && font->GetSize() == (unsigned int)size) {
+    if (font->GetPath() == path && font->GetSize() == (unsigned int)size &&  font->GetStyle() == styleFlags) {
       return {id, font.get()};
     }
   }
 
   int id = g_nextFontId++;
-  auto font = std::make_unique<Font>(path, size);
+  auto font = std::make_unique<Font>(path, size, styleFlags);
   Font* fontptr = font.get();
   g_fonts[id] = std::move(font);
 
@@ -126,7 +131,16 @@ std::pair<int, Font*> UI_LoadFont(const std::string &path, int size) {
 // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 // ╏ MAIN FUNCTION RESPONSIBLE FOR LOADING OUR FONT ╏
 // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+
+static FT_Library g_ftLib = nullptr;
 void Font::Load(const std::string& path, unsigned int size) {
+  if (g_ftLib == nullptr) {
+    if (FT_Init_FreeType(&g_ftLib)) {
+      std::cerr << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
+      return;
+    }
+  }
+
   std::string fullpath = Vulpis::getAssetPath(path);
   if (!std::filesystem::exists(fullpath)) {
     std::cerr << "!!! FATAL ERROR !!!" << std::endl;
@@ -134,15 +148,10 @@ void Font::Load(const std::string& path, unsigned int size) {
     std::cerr << "Current Working Dir: " << std::filesystem::current_path() << std::endl;
     return;
   }
-  FT_Library ft;
-  if (FT_Init_FreeType(&ft)) {
-    std::cerr << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
-    return;
-  }
+  
   FT_Face face;
-  if (FT_New_Face(ft, fullpath.c_str(), 0, &face)) {
+  if (FT_New_Face(g_ftLib, fullpath.c_str(), 0, &face)) {
     std::cerr << "ERROR::FREETYPE: Failed to load font: " << fullpath << std::endl;
-    FT_Done_FreeType(ft);
     return;
   }
 
@@ -173,13 +182,56 @@ const Character* Font::LoadGlyph(uint32_t c) {
   }
   FT_Face face = (FT_Face)ftFace;
 
-  if (FT_Get_Char_Index(face, c) == 0){
+  if (styleFlags & FONT_STYLE_ITALIC) {
+    FT_Matrix matrix;
+    matrix.xx = 0x10000L;
+    matrix.xy = (FT_Fixed)(0.2f * 0x10000L);
+    matrix.yx = 0;
+    matrix.yy = 0x10000L;
+    FT_Set_Transform(face, &matrix, nullptr);
+  } else {
+    FT_Set_Transform(face, nullptr, nullptr);
+  }
+
+  if (FT_Load_Char(face, c, FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP)) {
     return nullptr;
   }
 
-  if (FT_Load_Char(face, c, FT_LOAD_RENDER)) {
+  if (styleFlags & (FONT_STYLE_BOLD | FONT_STYLE_SEMI_BOLD | FONT_STYLE_VERY_BOLD | FONT_STYLE_THIN)) {
+    FT_Pos strength = 0;
+
+    if (styleFlags & FONT_STYLE_VERY_BOLD) {
+      strength = 144;
+    }
+
+    else if (styleFlags & FONT_STYLE_BOLD) {
+      strength = 96;
+    }
+
+    else if (styleFlags & FONT_STYLE_SEMI_BOLD) {
+      strength = 48;
+    }
+
+    else if (styleFlags & FONT_STYLE_THIN) {
+      strength = -48;
+    }
+
+    if (strength != 0) {
+      FT_Outline_Embolden(&face->glyph->outline, strength);
+    }
+  }
+
+  if (FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL)) {
     return nullptr;
   }
+
+  if (face->glyph->bitmap.width == 0 && face->glyph->bitmap.rows == 0) {
+    Character character = {
+      0, 0, 0, 0, 0, (unsigned int)face->glyph->advance.x, 0, 0, 0, 0
+    };
+    return &characters.emplace(c, character).first->second;
+  }
+
   GLuint tex;
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
   glGenTextures(1, &tex);
@@ -273,7 +325,22 @@ int l_load_font(lua_State* L) {
   const char* path = luaL_checkstring(L, 1);
   int size = luaL_checkinteger(L, 2);
 
-  auto [id, font] = UI_LoadFont(path, size);
+  int styleFlags = 0;
+  if (lua_istable(L, 3)) {
+    lua_getfield(L, 3, "bold");
+    if (lua_toboolean(L, -1)) styleFlags |= FONT_STYLE_BOLD;
+    lua_pop(L, 1);
+
+    lua_getfield(L, 3, "italic");
+    if (lua_toboolean(L, -1)) styleFlags |= FONT_STYLE_ITALIC;
+    lua_pop(L, 1);
+
+    lua_getfield(L, 3, "thin");
+    if (lua_toboolean(L, -1)) styleFlags |= FONT_STYLE_THIN;
+    lua_pop(L, 1);
+  }
+
+  auto [id, font] = UI_LoadFont(path, size, styleFlags);
 
   FontHandle* h = (FontHandle*)lua_newuserdata(L, sizeof(FontHandle));
   h->id = id;

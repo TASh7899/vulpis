@@ -195,10 +195,6 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
 
       float fSize = (float)data.font->GetSize();
 
-      float boldOffset = (data.weight >= FontWeight::Bold) ? std::max(1.0f, fSize/48.0f) : 0.0f;
-      bool useFakeBold = (boldOffset > 0.0f);
-
-      float italicSkew = (data.style == FontStyle::Italics) ? 0.20f : 0.0f;
       float underlineY = data.y + (fSize*0.1f);
       float strikeThroughY = data.y - (data.font->GetAscent() * 0.4f);
 
@@ -235,30 +231,21 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         float w = (float)ch.SizeX;
         float h = (float)ch.SizeY;
 
-        float skewOffset = h * italicSkew;
 
-        auto pushGlyphQuad = [&](float offsetX) {
-          float left   = xpos + offsetX;
-          float right  = xpos + w + offsetX;
+          float left   = xpos;
+          float right  = xpos + w;
           float top    = ypos - h;
           float bottom = ypos;
 
           // Triangle 1 (Top-Right -> Bottom-Right -> Bottom-Left)
-          vertices.push_back({ right + skewOffset, top,    ch.uMax, ch.vMin, data.color });
+          vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
           vertices.push_back({ right,              bottom, ch.uMax, ch.vMax, data.color });
           vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
 
           // Triangle 2 (Bottom-Left -> Top-Left -> Top-Right)
           vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
-          vertices.push_back({ left + skewOffset,  top,    ch.uMin, ch.vMin, data.color });
-          vertices.push_back({ right + skewOffset, top,    ch.uMax, ch.vMin, data.color });
-        };
-
-        pushGlyphQuad(0.0f);
-
-        if (useFakeBold) {
-          pushGlyphQuad(boldOffset);
-        }
+          vertices.push_back({ left,  top,    ch.uMin, ch.vMin, data.color });
+          vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
 
         cursorX += (ch.Advance >> 6);
       }

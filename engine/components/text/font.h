@@ -9,6 +9,13 @@
 #include "../../lua.hpp"
 #include <vector>
 
+const int FONT_STYLE_NORMAL = 0;
+const int FONT_STYLE_BOLD   = 1 << 0;
+const int FONT_STYLE_ITALIC = 1 << 1;
+const int FONT_STYLE_THIN   = 1 << 2;
+const int FONT_STYLE_SEMI_BOLD = 1 << 3;
+const int FONT_STYLE_VERY_BOLD = 1 << 4;
+
 struct Character {
   unsigned int TextureID;
   int SizeX, SizeY;
@@ -20,7 +27,7 @@ struct Character {
 
 class Font {
   public:
-    Font(const std::string& fontPath, unsigned int fontSize);
+    Font(const std::string& fontPath, unsigned int fontSize, int styleFlags = FONT_STYLE_NORMAL);
     ~Font();
 
     const Character& GetCharacter(uint32_t c);
@@ -29,6 +36,7 @@ class Font {
     unsigned int GetLineHeight() const { return lineHeight; }
     unsigned int GetAscent() const { return ascent; }
 
+    int GetStyle() const { return styleFlags; }
     const std::string& GetPath() const { return fontPath; }
     unsigned int GetSize() const { return fontSize; }
 
@@ -46,7 +54,7 @@ class Font {
   
     std::string fontPath;
     unsigned int fontSize;
-
+    int styleFlags;
 
     // Cache of loaded characters (Key is Unicode Codepoint)
     std::unordered_map<uint32_t, Character> characters;
@@ -66,7 +74,7 @@ struct FontHandle {
 };
 
 Font* UI_GetFontById(int id);
-std::pair<int, Font*> UI_LoadFont(const std::string& path, int size);
+std::pair<int, Font*> UI_LoadFont(const std::string& path, int size, int styleFlags);
 void UI_ShutdownFonts();
 
 int l_load_font(lua_State* L);
