@@ -18,7 +18,8 @@ struct FontConfig {
 void LoadFontConfig(lua_State* L);
 const FontConfig* GetFontConfig(const std::string& alias);
 
-int l_register_font_family(lua_State* L);
-int l_unregister_font_family(lua_State* L);
 
+void AutoRegisterAllFonts();
+
+int l_update_font_config(lua_State* L);
 

@@ -174,8 +174,7 @@ void updateTextLayout(Node* root);
 
 extern RenderCommandList* activeCommandList;
 
-void UI_SetRenderCommandList(RenderCommandList* list);
-
+void UI_InitTypes(lua_State *L);
 
 
 FontStyle parseFontStyle(const std::string& s);

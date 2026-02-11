@@ -16,6 +16,7 @@
 #include FT_OUTLINE_H
 
 #include "../system/pathUtils.h"
+#include "../../scripting/regsitry.h"
 
 // file local global font storage
 static std::unordered_map<int, std::unique_ptr<Font>> g_fonts;
@@ -394,6 +395,8 @@ int l_draw_text(lua_State* L) {
   return 0;
 }
 
+static AutoRegisterLua _reg_load_font("load_font", l_load_font);
+static AutoRegisterLua _reg_draw_text("draw_text", l_draw_text);
 
 void UI_ShutdownFonts() {
   g_fonts.clear();

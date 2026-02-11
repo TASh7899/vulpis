@@ -48,12 +48,7 @@ int GetFontFlagsFromNode(Node* n) {
 
 
 
-void UI_RegisterLuaFunctions(lua_State *L) {
-  lua_register(L, "load_font", l_load_font);
-  lua_register(L, "text", l_draw_text);
-  lua_register(L, "register_font_family", l_register_font_family);
-  lua_register(L, "unregister_font_family", l_unregister_font_family);
-
+void UI_InitTypes(lua_State *L) {
   luaL_newmetatable(L, "FontMeta");
   lua_pop(L, 1);
 }

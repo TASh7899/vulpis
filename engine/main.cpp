@@ -18,6 +18,7 @@
 #include "components/input/input.h"
 #include "components/vdom/vdom.h"
 #include "configLogic/font/font_registry.h"
+#include "./scripting/regsitry.h"
 
 int protected_buildNode(lua_State* L) {
   Node* root = buildNode(L, 1);
@@ -54,7 +55,9 @@ int main(int argc, char* argv[]) {
   lua_State* L = luaL_newstate();
   luaL_openlibs(L);
   registerStateBindings(L);
-  UI_RegisterLuaFunctions(L);
+  UI_InitTypes(L);
+  RegisterGlobalFunctions(L, "vulpis");
+  AutoRegisterAllFonts();
 
   lua_getglobal(L, "package");
   lua_getfield(L, -1, "path");
