@@ -1,33 +1,6 @@
 local elements = {}
 
-local DEFAULT_FONT_PATH = "src/assets/font.ttf"
-local DEFAULT_FONT_SIZE = 18
-
-local _systemFont = nil
-
-local function getSystemFont()
-	if _systemFont then
-		return _systemFont
-	end
-
-	if load_font then
-		local status, font = pcall(load_font, DEFAULT_FONT_PATH, DEFAULT_FONT_SIZE)
-
-		if status and font then
-			_systemFont = font
-			return font
-		else
-			print("[Elements] WARNING: Could not auto-load font at: " .. DEFAULT_FONT_PATH)
-		end
-	end
-
-	return nil
-end
-
-function elements.setSystemFont(font)
-	_systemFont = font
-end
-
+-- Helper to merge style tables
 function elements.mergeStyles(base, override)
 	local res = {}
 	for k, v in pairs(base or {}) do
@@ -39,6 +12,7 @@ function elements.mergeStyles(base, override)
 	return res
 end
 
+-- Helper to merge child lists
 function elements.mergeChildren(listA, listB)
 	local res = {}
 	if listA then
@@ -58,6 +32,8 @@ function elements.Box(props)
 	props = props or {}
 	local t = props.type or "hbox"
 
+	-- The engine expects specific style keys like 'w', 'h', 'BGColor', etc.
+	-- We pass the style table through as-is.
 	local node = {
 		type = t,
 		style = props.style or {},
@@ -81,24 +57,27 @@ function elements.HBox(props)
 	return elements.Box(props)
 end
 
-function elements.Text(props)
+function elements.Text(props, optionalStyle)
+	-- Support shorthand: elements.Text("Hello World") or elements.Text("Text", { color = "#FFF" })
 	if type(props) == "string" then
-		props = { text = props }
+		props = {
+			text = props,
+			style = optionalStyle or {},
+		}
 	end
 
 	props = props or {}
-	props.type = "text"
-	props.style = props.style or {}
 
-	if not props.style.font then
-		props.style.font = getSystemFont()
-	end
+	local node = {
+		type = "text",
+		text = props.text or "",
+		style = props.style or {},
+		children = props.children or {},
+		onClick = props.onClick,
+		key = props.key,
+	}
 
-	if not props.style.color then
-		props.style.color = { 255, 255, 255, 255 }
-	end
-
-	return props
+	return node
 end
 
 return elements

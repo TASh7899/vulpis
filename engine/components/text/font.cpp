@@ -324,7 +324,7 @@ int l_load_font(lua_State* L) {
   }
 
   const char* path = luaL_checkstring(L, 1);
-  int size = luaL_checkinteger(L, 2);
+  int size = luaL_optinteger(L, 2, 16);
 
   int styleFlags = 0;
   if (lua_istable(L, 3)) {
@@ -342,6 +342,12 @@ int l_load_font(lua_State* L) {
   }
 
   auto [id, font] = UI_LoadFont(path, size, styleFlags);
+  if (!font || id < 0) {
+    // Return nil + error message so Lua knows it failed
+    lua_pushnil(L);
+    lua_pushstring(L, "Failed to load font file");
+    return 2; 
+  }
 
   FontHandle* h = (FontHandle*)lua_newuserdata(L, sizeof(FontHandle));
   h->id = id;
