@@ -63,6 +63,12 @@ namespace Layout {
           YGNodeStyleSetPositionType(yogaNode, YGPositionTypeRelative);
         }
 
+        if (n->hasLeft) YGNodeStyleSetPosition(yogaNode, YGEdgeLeft, n->leftVal);
+        if (n->hasTop) YGNodeStyleSetPosition(yogaNode, YGEdgeTop, n->topVal);
+        if (n->hasRight) YGNodeStyleSetPosition(yogaNode, YGEdgeRight, n->rightVal);
+        if (n->hasBottom) YGNodeStyleSetPosition(yogaNode, YGEdgeBottom, n->bottomVal);
+
+
         if (n->type == "text") {
           YGNodeSetMeasureFunc(yogaNode, textMeasure);
           YGNodeStyleSetFlexShrink(yogaNode, 0.0f);
@@ -121,7 +127,7 @@ namespace Layout {
           std::cerr << "ERROR: Text Node (text='" 
             << n->text.substr(0, 20) << (n->text.length() > 20 ? "..." : "") 
             << "') cannot have children.\n";
-            exit(1);
+          exit(1);
         } else {
           for (size_t i = 0; i < n->children.size(); i++) {
             YGNodeRef childYoga = buildTree(n->children[i]);

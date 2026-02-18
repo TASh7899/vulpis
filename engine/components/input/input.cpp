@@ -1,6 +1,7 @@
 #include "input.h"
 #include <SDL_events.h>
 #include <SDL_mouse.h>
+#include <SDL_stdinc.h>
 #include <algorithm>
 #include <iostream>
 #include <lua.h>
@@ -79,34 +80,37 @@ namespace Input {
     }
 
     else if (event.type == SDL_MOUSEBUTTONDOWN) {
-
-    }
-
-    else if (event.type == SDL_MOUSEBUTTONUP) {
-      if (event.button.button != SDL_BUTTON_LEFT) {
-        return;
-      }
-
       int mx = event.button.x;
       int my = event.button.y;
+      Uint8 button = event.button.button;
 
       Node* target = hitTest(root, mx, my);
 
       while (target) {
-        if (target->onClickRef != -2) {
-          lua_rawgeti(L, LUA_REGISTRYINDEX, target->onClickRef);
+        int refToCall = -2;
+
+        if (button == SDL_BUTTON_LEFT) {
+          refToCall = target->onClickRef;
+        } else if (button == SDL_BUTTON_RIGHT) {
+          refToCall = target->onRightClickRef;
+        }
+
+        if (refToCall != -2) {
+          lua_rawgeti(L, LUA_REGISTRYINDEX, refToCall);
 
           if (!lua_isfunction(L, -1)) {
             lua_pop(L, 1);
             target = target->parent;
             continue;
-
           }
-          if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
-            std::cout << "Input Error:" << lua_tostring(L, -1) << std::endl;
+
+          lua_pushnumber(L, mx);
+          lua_pushnumber(L, my);
+
+          if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+            std::cout << "Input Error (Mouse Up): " << lua_tostring(L, -1) << std::endl;
             lua_pop(L, 1);
           }
-
           break;
         }
         target = target->parent;

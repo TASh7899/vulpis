@@ -300,6 +300,25 @@ namespace VDOM {
     update(n->widthStyle, getLength(L, "w"), layoutChanged);
     update(n->heightStyle, getLength(L, "h"), layoutChanged);
 
+    auto updatePos = [&](const char* k, bool& has, float& v) {
+      lua_getfield(L, -1, k);
+      bool newHas = !lua_isnil(L, -1);
+      float newVal = newHas ? (float)lua_tonumber(L, -1) : 0.0f;
+      lua_pop(L, 1);
+
+      if (has != newHas || (newHas && v != newVal)) {
+        has = newHas;
+        v = newVal;
+        layoutChanged = true;
+      }
+    };
+
+    updatePos("left", n->hasLeft, n->leftVal);
+    updatePos("top", n->hasTop, n->topVal);
+    updatePos("right", n->hasRight, n->rightVal);
+    updatePos("bottom", n->hasBottom, n->bottomVal);
+
+
     // min max height width
     update(n->minWidth, getFloatProp(L, "minWidth", 0.0f), layoutChanged);
     update(n->maxWidth,  getFloatProp(L, "maxWidth", 99999.0f),  layoutChanged);
@@ -367,6 +386,7 @@ namespace VDOM {
     updateCallback(L, idx, "onClick", n->onClickRef);
     updateCallback(L, idx, "onMouseEnter", n->onMouseEnterRef);
     updateCallback(L, idx, "onMouseLeave", n->onMouseLeaveRef);
+    updateCallback(L, idx, "onRightClick", n->onRightClickRef);
   }
 
   void reconcileChildren(lua_State* L, Node* current, int childrenIdx) {

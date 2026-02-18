@@ -103,6 +103,7 @@ struct Node {
   Length heightStyle;
 
   bool overflowHidden = true;
+  bool overflowScroll = false;
 
   int spacing = 0;
   int margin = 0;
@@ -120,7 +121,13 @@ struct Node {
   int onClickRef = -2;
   int onMouseEnterRef = -2;
   int onMouseLeaveRef = -2;
+  int onRightClickRef = -2;
   bool isHovered = false;
+
+  bool hasLeft = false; float leftVal = 0.0f;
+  bool hasTop = false; float topVal = 0.0f;
+  bool hasRight = false; float rightVal = 0.0f;
+  bool hasBottom = false; float bottomVal = 0.0f;
 
   Node* hitTest(Node* root, int x, int y);
 

@@ -153,6 +153,7 @@ void parseEvents(lua_State *L, Node *n, int idx) {
   getCallback("onClick", n->onClickRef);
   getCallback("onMouseEnter", n->onMouseEnterRef);
   getCallback("onMouseLeave", n->onMouseLeaveRef);
+  getCallback("onRightClick", n->onRightClickRef);
 }
 
 
@@ -362,6 +363,18 @@ Node* buildNode(lua_State* L, int idx) {
     n->widthStyle = getLength(L, "w");
     n->heightStyle = getLength(L, "h");
 
+    auto checkFloat = [&](const char* k, bool& has, float& v) {
+      lua_getfield(L, -1, k);
+      if (!lua_isnil(L, -1)) {
+        has = true;
+        v = (float)lua_tonumber(L, -1);
+      }
+      lua_pop(L, 1);
+    };
+    checkFloat("left", n->hasLeft, n->leftVal);
+    checkFloat("top", n->hasTop, n->topVal);
+    checkFloat("right", n->hasRight, n->rightVal);
+    checkFloat("bottom", n->hasBottom, n->bottomVal);
   }
 
   n->spacing = getInt("gap", getInt("spacing", 0));
@@ -389,13 +402,25 @@ Node* buildNode(lua_State* L, int idx) {
   n->flexShrink  = getFloat("flexShrink", 0.0f);
   n->alignItems = parseAlign(getString("alignItems", "start"));
   n->justifyContent = parseJustify(getString("justifyContent", "start"));
-
   n->textAlign = parseTextAlign(getString("textAlign", "left"));
+
+  std::string pos = getString("position", "relative");
+  if (pos == "absolute") {
+    n->position = PositionType::Absolute;
+  } else {
+    n->position = PositionType::Relative;
+  }
+
 
   std::string overflow = getString("overflow", "hidden");
   if (overflow == "visible") {
     n->overflowHidden = false;
+    n->overflowScroll = false;
+  } else if (overflow == "scroll" || overflow == "auto") {
+    n->overflowHidden = true;
+    n->overflowScroll = true;
   } else {
+    n->overflowScroll = false;
     n->overflowHidden = true;
   }
 
@@ -598,6 +623,10 @@ void freeTree(lua_State* L, Node* n) {
   if (n->onMouseLeaveRef != -2) {
     luaL_unref(L, LUA_REGISTRYINDEX, n->onMouseLeaveRef);
     n->onMouseLeaveRef = -2;
+  }
+  if (n->onRightClickRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onRightClickRef);
+    n->onRightClickRef = -2;
   }
   for (Node* c : n->children) {
     freeTree(L, c);
