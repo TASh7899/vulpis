@@ -365,6 +365,8 @@ namespace VDOM {
 
     lua_pop(L, 1);
     updateCallback(L, idx, "onClick", n->onClickRef);
+    updateCallback(L, idx, "onMouseEnter", n->onMouseEnterRef);
+    updateCallback(L, idx, "onMouseLeave", n->onMouseLeaveRef);
   }
 
   void reconcileChildren(lua_State* L, Node* current, int childrenIdx) {

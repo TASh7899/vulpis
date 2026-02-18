@@ -118,6 +118,10 @@ struct Node {
   Justify justifyContent = Justify::Start;
 
   int onClickRef = -2;
+  int onMouseEnterRef = -2;
+  int onMouseLeaveRef = -2;
+  bool isHovered = false;
+
   Node* hitTest(Node* root, int x, int y);
 
   SDL_Color color = {0,0,0,0};
@@ -126,6 +130,7 @@ struct Node {
   Node* parent = nullptr;
   bool isLayoutDirty = true;
   bool isPaintDirty = true;
+
 
   void makeLayoutDirty() {
     isLayoutDirty = true;
@@ -181,7 +186,7 @@ FontStyle parseFontStyle(const std::string& s);
 FontWeight parseFontWeight(const std::string& s);
 TextDecoration parseTextDecoration(const std::string& s);
 std::string getVariantKey(FontWeight w, FontStyle s);
-
+void parseEvents(lua_State* L, Node* n, int idx);
 int getFlags(Node* node);
 
 

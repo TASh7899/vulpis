@@ -140,6 +140,21 @@ int getFlags(Node* node) {
   return flags;
 };
 
+void parseEvents(lua_State *L, Node *n, int idx) {
+  auto getCallback = [&](const char* key, int& ref) {
+    lua_getfield(L, idx, key);
+    if (lua_isfunction(L, -1)) {
+      ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    } else {
+      lua_pop(L, 1);
+    }
+  };
+
+  getCallback("onClick", n->onClickRef);
+  getCallback("onMouseEnter", n->onMouseEnterRef);
+  getCallback("onMouseLeave", n->onMouseLeaveRef);
+}
+
 
 void NodeParseText(Node* n, lua_State* L) {
   lua_getfield(L, -1, "fontStyle");
@@ -404,14 +419,8 @@ Node* buildNode(lua_State* L, int idx) {
 
   lua_pop(L, 1);
 
-  lua_getfield(L, idx, "onClick");
-  if (lua_isfunction(L, -1)) {
-    n->onClickRef = luaL_ref(L, LUA_REGISTRYINDEX);
-  } else {
-    lua_pop(L, 1);
-  }
+  parseEvents(L, n, idx);
 
-  VDOM::updateCallback(L, idx, "onClick", n->onClickRef);
   lua_getfield(L, idx, "children");
   if (lua_istable(L, -1)) {
     lua_pushnil(L);
@@ -582,7 +591,14 @@ void freeTree(lua_State* L, Node* n) {
     luaL_unref(L, LUA_REGISTRYINDEX, n->onClickRef);
     n->onClickRef = -2;
   }
-
+  if (n->onMouseEnterRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onMouseEnterRef);
+    n->onMouseEnterRef = -2;
+  }
+  if (n->onMouseLeaveRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onMouseLeaveRef);
+    n->onMouseLeaveRef = -2;
+  }
   for (Node* c : n->children) {
     freeTree(L, c);
   }
