@@ -156,6 +156,10 @@ void parseEvents(lua_State *L, Node *n, int idx) {
   getCallback("onMouseEnter", n->onMouseEnterRef);
   getCallback("onMouseLeave", n->onMouseLeaveRef);
   getCallback("onRightClick", n->onRightClickRef);
+  getCallback("onDragStart", n->onDragStartRef);
+  getCallback("onDragEnd", n->onDragEndRef);
+  getCallback("onDrag", n->onDragRef);
+
 }
 
 
@@ -323,6 +327,10 @@ Node* buildNode(lua_State* L, int idx) {
   }
   lua_pop(L, 1);
 
+  lua_getfield(L, idx, "id");
+  if (lua_isstring(L, -1)) n->id = lua_tostring(L, -1);
+  lua_pop(L, 1);
+
   lua_getfield(L, idx, "style");
   bool hasStyle = lua_istable(L, -1);
 
@@ -446,6 +454,12 @@ Node* buildNode(lua_State* L, int idx) {
 
   lua_pop(L, 1);
 
+  lua_getfield(L, idx, "draggable");
+  if (lua_isboolean(L, -1)) {
+    n->isDraggable = lua_toboolean(L, -1);
+  }
+  lua_pop(L, 1);
+
   parseEvents(L, n, idx);
 
   lua_getfield(L, idx, "children");
@@ -558,75 +572,123 @@ void layout(Node* n, int x, int y) {
   }
 }
 
-void generateRenderCommands(Node *n, RenderCommandList &list) {
+static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX,
+    float parentOffsetY, bool isDragPass, bool isInsideDraggedNode) {
+
+  bool treatAsDragged = isInsideDraggedNode || n->isDragging;
+
+  // In the drag pass, skip nodes that aren't dragged (but search their children to find the dragged one)
+  if (isDragPass && !treatAsDragged) {
+    for (Node* c : n->children) {
+      renderNodePass(c, list, parentOffsetX, parentOffsetY, isDragPass, false);
+    }
+    return; // Skip rendering the normal UI in the drag pass
+  }
+
+  // Accumulate offsets
+  float totalOffsetX = parentOffsetX;
+  float totalOffsetY = parentOffsetY;
+
+  if (isDragPass) {
+    totalOffsetX += n->dragOffsetX;
+    totalOffsetY += n->dragOffsetY;
+  }
+
+  float renderX = n->x + totalOffsetX;
+  float renderY = n->y + totalOffsetY;
+
+  // Make the dragged ghost slightly transparent (70% opacity)
+  float alphaMultiplier = (isDragPass && treatAsDragged) ? 0.7f : 1.0f;
+
   if (n->hasBackground) {
     list.push(DrawRectCommand{
-        {n->x, n->y, n->w, n->h},
-        {n->color.r, n->color.g, n->color.b, n->color.a}
+        {renderX, renderY, n->w, n->h},
+        {n->color.r, n->color.g, n->color.b, (uint8_t)(n->color.a * alphaMultiplier)}
         });
   }
 
   if (n->type == "text" && !n->computedLines.empty()) {
     Font* font = n->font ? n->font : UI_GetFontById(n->fontId);
-    if (!font) return;
-    n->font = font;
+    if (font) {
+      n->font = font;
+      float startX = renderX + n->paddingLeft;
+      float cursorY = renderY + n->paddingTop + n->font->GetAscent();
+      float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
 
-    float startX = n->x + n->paddingLeft;
-    float cursorY = n->y + n->paddingTop + n->font->GetAscent();
+      for (const std::string& line : n->computedLines) {
+        float lineWidth = 0;
+        for (char c : line) {
+          lineWidth += (n->font->GetCharacter(c).Advance >> 6);
+        }
+        float xOffset = 0;
+        if (n->textAlign == TextAlign::Center) {
+          xOffset = (contentWidth - lineWidth) / 2.0f;
+        } else if (n->textAlign == TextAlign::Right) {
+          xOffset = contentWidth - lineWidth;
+        }
 
-    float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
+        // FIXED: Using Color instead of SDL_Color
+        Color renderTextColor = {
+          n->textColor.r, 
+          n->textColor.g, 
+          n->textColor.b, 
+          (uint8_t)(n->textColor.a * alphaMultiplier)
+        };
 
-    for (const std::string& line : n->computedLines) {
-
-      float lineWidth = 0;
-      for (char c : line) {
-        lineWidth += (n->font->GetCharacter(c).Advance >> 6);
+        list.push(DrawTextCommand{line, n->font, startX + xOffset, cursorY, renderTextColor, n->textDecoration});
+        cursorY += n->computedLineHeight;
       }
-
-      float xOffset = 0;
-      if (n->textAlign == TextAlign::Center) {
-        xOffset = (contentWidth - lineWidth) / 2.0f;
-      }
-
-      else if (n->textAlign == TextAlign::Right) {
-        xOffset = contentWidth - lineWidth;
-      }
-
-      list.push(DrawTextCommand{line, n->font, startX + xOffset, cursorY, n->textColor,
-          n->textDecoration});
-      cursorY += n->computedLineHeight;
     }
   }
 
+  // Handle Clipping properly!
+  bool applyClip = false;
   if (n->overflowHidden) {
-    list.push(PushClipCommand{{n->x, n->y, n->w, n->h}});
+    if (!isDragPass) {
+      applyClip = true; // Clip normally for base UI
+    } else if (treatAsDragged && !n->isDragging) {
+      applyClip = true; // Clip inner children of the dragged node
+    }
   }
 
-  for (Node* c :  n->children) {
-    generateRenderCommands(c, list);
+  if (applyClip) {
+    list.push(PushClipCommand{{renderX, renderY, n->w, n->h}});
   }
 
+  // Render children
+  for (Node* c : n->children) {
+    renderNodePass(c, list, totalOffsetX, totalOffsetY, isDragPass, treatAsDragged);
+  }
+
+  // Render Scrollbars
   ScrollbarMetrics sb = n->getScrollbarMetrics();
   if (sb.isVisible && n->scrollbarOpacity > 0.0f) {
-
-    uint8_t trackAlpha = (uint8_t)(180 * n->scrollbarOpacity);
-    uint8_t thumbAlpha = (uint8_t)(255 * n->scrollbarOpacity);
+    uint8_t trackAlpha = (uint8_t)(180 * n->scrollbarOpacity * alphaMultiplier);
+    uint8_t thumbAlpha = (uint8_t)(255 * n->scrollbarOpacity * alphaMultiplier);
 
     list.push(DrawRectCommand{
-        {sb.trackX, sb.trackY, sb.trackW, sb.trackH},
+        {sb.trackX + totalOffsetX, sb.trackY + totalOffsetY, sb.trackW, sb.trackH},
         {0, 0, 0, trackAlpha},
         });
 
     float pad = 2.0f;
     list.push(DrawRectCommand{
-        {sb.trackX + pad, sb.thumbY + pad, sb.trackW - (pad * 2.0f), sb.thumbH - (pad * 2.0f)},
+        {sb.trackX + pad + totalOffsetX, sb.thumbY + pad + totalOffsetY, sb.trackW - (pad * 2.0f), sb.thumbH - (pad * 2.0f)},
         {180, 180, 180, thumbAlpha}
         });
   }
 
-  if (n->overflowHidden) {
+  if (applyClip) {
     list.push(PopClipCommand{});
   }
+}
+
+void generateRenderCommands(Node *n, RenderCommandList &list, float parentOffsetX, float parentOffsetY) {
+  // PASS 1: Draw the base UI layer normally
+  renderNodePass(n, list, parentOffsetX, parentOffsetY, false, false);
+
+  // PASS 2: Draw the dragged elements on top of everything!
+  renderNodePass(n, list, parentOffsetX, parentOffsetY, true, false);
 }
 
 void freeTree(lua_State* L, Node* n) {
@@ -647,6 +709,19 @@ void freeTree(lua_State* L, Node* n) {
   if (n->onRightClickRef != -2) {
     luaL_unref(L, LUA_REGISTRYINDEX, n->onRightClickRef);
     n->onRightClickRef = -2;
+  }
+
+  if (n->onDragStartRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onDragStartRef);
+    n->onDragStartRef = -2;
+  }
+  if (n->onDragRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onDragRef);
+    n->onDragRef = -2;
+  }
+  if (n->onDragEndRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onDragEndRef);
+    n->onDragEndRef = -2;
   }
   for (Node* c : n->children) {
     freeTree(L, c);

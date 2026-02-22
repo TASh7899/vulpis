@@ -10,11 +10,18 @@
 namespace Input {
   static Node* draggedScrollbarNode = nullptr;
   static float dragOffsetY = 0.0f;
+  static Node* activeDragNode = nullptr;
+  static int dragInitialMouseX = 0;
+  static int dragInitialMouseY = 0;
 
 
-  Node* hitTest(Node* root, int x, int y) {
-    if (!root) return nullptr;
-    if (x < root->x || x > root->x + root->w || y < root->y || y > root->y + root->h) {
+  Node* hitTest(Node* root, int x, int y, Node* ignore) {
+    if (!root || root == ignore) return nullptr;
+
+    float currentX = root->x + root->dragOffsetX;
+    float currentY = root->y + root->dragOffsetY;
+
+    if (x < currentX || x > currentX + root->w || y < currentY || y > currentY + root->h) {
       return nullptr;
     }
 
@@ -26,6 +33,43 @@ namespace Input {
     }
 
     return root;
+  }
+
+  void fireLuaEvent(lua_State* L, int ref, int dx = 0, int dy = 0) {
+    if (ref != -2) {
+      lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+      if (lua_isfunction(L, -1)) {
+        lua_pushinteger(L, dx);
+        lua_pushinteger(L, dy);
+        if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+          std::cout << "Drag Event Error: " << lua_tostring(L, -1) << std::endl;
+          lua_pop(L, 1);
+        }
+      } else {
+        lua_pop(L, 1);
+      }
+    }
+  }
+
+
+  void fireDragEndEvent(lua_State* L, int ref, const std::string& dropId, int dx, int dy) {
+    if (ref != -2) {
+      lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+      if (lua_isfunction(L, -1)) {
+        if (dropId.empty()) lua_pushnil(L); 
+        else lua_pushstring(L, dropId.c_str());
+
+        lua_pushinteger(L, dx);
+        lua_pushinteger(L, dy);
+
+        if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
+          std::cout << "Drag End Error: " << lua_tostring(L, -1) << std::endl;
+          lua_pop(L, 1);
+        }
+      } else {
+        lua_pop(L, 1);
+      }
+    }
   }
 
   void processHover(lua_State* L, Node* node, const std::vector<Node*>& activePath) {
@@ -86,8 +130,17 @@ namespace Input {
         return;
       }
 
-      Node* target = hitTest(root, mx, my);
+      if (activeDragNode && activeDragNode->isDragging) {
+        int dx = mx - dragInitialMouseX;
+        int dy = my - dragInitialMouseY;
 
+        activeDragNode->dragOffsetX = (float)dx;
+        activeDragNode->dragOffsetY = (float)dy;
+
+        fireLuaEvent(L, activeDragNode->onDragRef, dx, dy);
+      }
+
+      Node* target = hitTest(root, mx, my);
       std::vector<Node*> activePath;
       Node* curr = target;
       while (curr) {
@@ -101,7 +154,31 @@ namespace Input {
     else if (event.type == SDL_MOUSEBUTTONUP) {
       if (event.button.button == SDL_BUTTON_LEFT) {
         draggedScrollbarNode = nullptr;
+
+        if (activeDragNode) {
+          int finalDx = event.button.x - dragInitialMouseX;
+          int finalDy = event.button.y - dragInitialMouseY;
+
+          Node* dropTarget = hitTest(root, event.button.x, event.button.y, activeDragNode);
+          std::string dropId = "";
+
+          while (dropTarget) {
+            if (!dropTarget->id.empty()) {
+              dropId = dropTarget->id;
+              break;
+            }
+            dropTarget = dropTarget->parent;
+          }
+
+          fireDragEndEvent(L, activeDragNode->onDragEndRef, dropId, finalDx, finalDy);
+
+          activeDragNode->isDragging = false;
+          activeDragNode->dragOffsetX = 0.0f;
+          activeDragNode->dragOffsetY = 0.0f;
+          activeDragNode = nullptr;
+        }
       }
+
     }
 
     else if (event.type == SDL_MOUSEWHEEL) {
@@ -148,7 +225,7 @@ namespace Input {
           if (sb.isVisible) {
             if (mx >= sb.trackX && mx <= sb.trackX + sb.trackW &&
                 my >= sb.trackY && my <= sb.trackY + sb.trackH) {
-              
+
               draggedScrollbarNode = curr;
 
               float localY = my - sb.trackY;
@@ -170,6 +247,23 @@ namespace Input {
             }
           }
           curr = curr->parent;
+        }
+      }
+
+      if (!eventConsumed && button == SDL_BUTTON_LEFT) {
+        Node* dragCheck = target;
+        while (dragCheck) {
+          if (dragCheck->isDraggable) {
+            activeDragNode = dragCheck;
+            activeDragNode->isDragging = true;
+            dragInitialMouseX = mx;
+            dragInitialMouseY = my;
+
+            fireLuaEvent(L, activeDragNode->onDragStartRef);
+            eventConsumed = true;
+            break; // Stop bubbling up
+          }
+          dragCheck = dragCheck->parent;
         }
       }
 

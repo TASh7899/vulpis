@@ -104,6 +104,14 @@ namespace VDOM {
     }
     lua_pop(L, 1);
 
+    lua_getfield(L, idx, "id");
+    if (lua_isstring(L, -1)) {
+      std::string newId = lua_tostring(L, -1);
+      if (n->id != newId) n->id = newId;
+    } else if (lua_isnil(L, -1)) {
+      n->id = "";
+    }
+    lua_pop(L, 1);
 
     lua_getfield(L, idx, "style");
     if (!lua_istable(L, -1)) {
@@ -383,10 +391,15 @@ namespace VDOM {
     }
 
     lua_pop(L, 1);
+    updateCallback(L, idx, "onDragStart", n->onDragStartRef);
+    updateCallback(L, idx, "onDrag", n->onDragRef);
+    updateCallback(L, idx, "onDragEnd", n->onDragEndRef);
+
     updateCallback(L, idx, "onClick", n->onClickRef);
     updateCallback(L, idx, "onMouseEnter", n->onMouseEnterRef);
     updateCallback(L, idx, "onMouseLeave", n->onMouseLeaveRef);
     updateCallback(L, idx, "onRightClick", n->onRightClickRef);
+
   }
 
   void reconcileChildren(lua_State* L, Node* current, int childrenIdx) {

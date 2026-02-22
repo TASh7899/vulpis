@@ -79,6 +79,7 @@ struct ScrollbarMetrics {
 struct Node {
   std::string type;
   std::string key;
+  std::string id = "";
   std::vector<Node*> children;
 
   std::string text;
@@ -118,6 +119,17 @@ struct Node {
   float targetScrollY = 0.0f;
   float contentW = 0.0f;
   float contentH = 0.0f;
+
+  // attributes for dragging
+  bool isDraggable = false;
+  bool isDragging = false;
+
+  float dragOffsetX = 0.0f;
+  float dragOffsetY = 0.0f;
+
+  int onDragStartRef = -2;
+  int onDragRef = -2;
+  int onDragEndRef = -2;
 
 
   int spacing = 0;
@@ -188,7 +200,7 @@ TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float 
 
 
 Node* buildNode(lua_State* L, int idx);
-void generateRenderCommands(Node* n, RenderCommandList& list);
+void generateRenderCommands(Node* n, RenderCommandList& list, float parentOffsetX = 0.0f, float parentOffsetY = 0.0f);
 void freeTree(lua_State* L, Node* n);
 void resolveStyles(Node* n, int parentW, int parentH);
 void reconcile(lua_State* L, Node* current, int idx);

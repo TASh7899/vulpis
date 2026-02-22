@@ -4,7 +4,7 @@
 
 namespace Input {
   // determine which node is under the mouse
-  Node* hitTest(Node* root, int x, int y);
+  Node* hitTest(Node* root, int x, int y, Node* ignore = nullptr);
   // handle all type of events like mouse clicks
   void handleEvent(lua_State* L, SDL_Event& event, Node* root);
 
