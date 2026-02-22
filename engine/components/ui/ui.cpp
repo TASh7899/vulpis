@@ -770,6 +770,12 @@ void UI_UpdateSmoothScrolling(Node *n, float dt) {
 
   if (n->overflowScroll) {
 
+    float maxScrollY = std::max(0.0f, n->contentH - n->h);
+    float maxScrollX = std::max(0.0f, n->contentW - n->w);
+
+    n->targetScrollY = std::clamp(n->targetScrollY, 0.0f, maxScrollY);
+    n->targetScrollX = std::clamp(n->targetScrollX, 0.0f, maxScrollX);
+
     if (n->scrollbarTimer > 0.0f) {
       n->scrollbarTimer -= dt;
       n->scrollbarOpacity += 8.0f * dt;
