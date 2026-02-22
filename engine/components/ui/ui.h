@@ -69,6 +69,13 @@ enum class PositionType {
   Absolute
 };
 
+struct ScrollbarMetrics {
+  bool isVisible;
+  float trackX, trackY, trackW, trackH;
+  float thumbY, thumbH;
+  float maxScrollY;
+};
+
 struct Node {
   std::string type;
   std::string key;
@@ -105,6 +112,14 @@ struct Node {
   bool overflowHidden = true;
   bool overflowScroll = false;
 
+  float scrollX = 0.0f;
+  float scrollY = 0.0f;
+  float targetScrollX = 0.0f;
+  float targetScrollY = 0.0f;
+  float contentW = 0.0f;
+  float contentH = 0.0f;
+
+
   int spacing = 0;
   int margin = 0;
   int marginTop = 0, marginBottom = 0, marginLeft = 0, marginRight = 0;
@@ -130,6 +145,11 @@ struct Node {
   bool hasBottom = false; float bottomVal = 0.0f;
 
   Node* hitTest(Node* root, int x, int y);
+  
+  float scrollbarOpacity = 0.0f;
+  float scrollbarTimer = 0.0f;
+
+  ScrollbarMetrics getScrollbarMetrics();
 
   SDL_Color color = {0,0,0,0};
   bool hasBackground = false;
@@ -195,5 +215,4 @@ TextDecoration parseTextDecoration(const std::string& s);
 std::string getVariantKey(FontWeight w, FontStyle s);
 void parseEvents(lua_State* L, Node* n, int idx);
 int getFlags(Node* node);
-
-
+void UI_UpdateSmoothScrolling(Node* n, float dt);

@@ -150,11 +150,25 @@ namespace Layout {
         n->w = YGNodeLayoutGetWidth(yogaNode);
         n->h = YGNodeLayoutGetHeight(yogaNode);
 
+        float maxChildBottom = 0.0f;
+        float maxChildRight = 0.0f;
 
         for (size_t i = 0; i < n->children.size(); i++) {
           YGNodeRef childNode = YGNodeGetChild(yogaNode, i);
-          applyLayout(n->children[i], childNode, n->x, n->y);
+
+          float childRelX = YGNodeLayoutGetLeft(childNode);
+          float childRelY = YGNodeLayoutGetTop(childNode);
+          float childW = YGNodeLayoutGetWidth(childNode);
+          float childH = YGNodeLayoutGetHeight(childNode);
+
+          maxChildRight = std::max(maxChildRight, childRelX + childW);
+          maxChildBottom = std::max(maxChildBottom, childRelY + childH);
+
+          applyLayout(n->children[i], childNode, n->x - n->scrollX, n->y - n->scrollY);
         }
+
+        n->contentW = maxChildRight + n->paddingRight;
+        n->contentH = maxChildBottom + n->paddingBottom;
       }
 
       YGAlign mapAlign(Align a) {

@@ -3,7 +3,9 @@
 #include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_render.h>
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <lauxlib.h>
 #include <lua.h>
 #include <string>
@@ -604,6 +606,24 @@ void generateRenderCommands(Node *n, RenderCommandList &list) {
     generateRenderCommands(c, list);
   }
 
+  ScrollbarMetrics sb = n->getScrollbarMetrics();
+  if (sb.isVisible && n->scrollbarOpacity > 0.0f) {
+
+    uint8_t trackAlpha = (uint8_t)(180 * n->scrollbarOpacity);
+    uint8_t thumbAlpha = (uint8_t)(255 * n->scrollbarOpacity);
+
+    list.push(DrawRectCommand{
+        {sb.trackX, sb.trackY, sb.trackW, sb.trackH},
+        {0, 0, 0, trackAlpha},
+        });
+
+    float pad = 2.0f;
+    list.push(DrawRectCommand{
+        {sb.trackX + pad, sb.thumbY + pad, sb.trackW - (pad * 2.0f), sb.thumbH - (pad * 2.0f)},
+        {180, 180, 180, thumbAlpha}
+        });
+  }
+
   if (n->overflowHidden) {
     list.push(PopClipCommand{});
   }
@@ -743,6 +763,80 @@ void updateTextLayout(Node* root) {
     updateTextLayout(c);
   }
 }
+
+
+void UI_UpdateSmoothScrolling(Node *n, float dt) {
+  if (!n) return;
+
+  if (n->overflowScroll) {
+
+    if (n->scrollbarTimer > 0.0f) {
+      n->scrollbarTimer -= dt;
+      n->scrollbarOpacity += 8.0f * dt;
+      if (n->scrollbarOpacity > 1.0f) n->scrollbarOpacity = 1.0f;
+    } else {
+      n->scrollbarOpacity -= 2.0f * dt; // Fade out slower
+      if (n->scrollbarOpacity < 0.0f) n->scrollbarOpacity = 0.0f;
+    }
+
+    float diffY = n->targetScrollY - n->scrollY;
+    float diffX = n->targetScrollX - n->scrollX;
+
+    bool needsLayout = false;
+
+    if (std::abs(diffY) > 0.5f) {
+      n->scrollY += diffY * 15.0f * dt;
+      needsLayout = true;
+    } else if (n->scrollY != n->targetScrollY) {
+      n->scrollY = n->targetScrollY;
+      needsLayout = true;
+    }
+
+    if (std::abs(diffX) > 0.5f) {
+      n->scrollX += diffX * 15.0f * dt;
+      needsLayout = true;
+    } else if (n->scrollX != n->targetScrollX) {
+      n->scrollX = n->targetScrollX;
+      needsLayout = true;
+    }
+
+    if (needsLayout) {
+      n->makeLayoutDirty();
+    }
+  }
+  for (Node* c : n->children) {
+    UI_UpdateSmoothScrolling(c, dt);
+  }
+
+}
+
+
+ScrollbarMetrics Node::getScrollbarMetrics() {
+  ScrollbarMetrics m;
+  m.isVisible = false;
+
+  if (!this->overflowScroll || this->contentH <= this->h) {
+    return m;
+  }
+  m.isVisible = true;
+  m.trackW = 10.0f;
+  m.trackX = this->x + this->w - m.trackW;
+  m.trackY = this->y;
+  m.trackH = this->h;
+
+  float thumbMinH = 20.0f;
+  float visibleRatio = this->h / this->contentH;
+  m.thumbH = std::max(thumbMinH, visibleRatio * this->h);
+
+  m.maxScrollY = this->contentH - this->h;
+  float scrollPct = this->scrollY / m.maxScrollY;
+
+  m.thumbY = this->y + (scrollPct * (this->h - m.thumbH));
+
+  return m;
+}
+
+
 
 
 

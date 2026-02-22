@@ -255,6 +255,8 @@ int main(int argc, char* argv[]) {
     float dt = (currentTime - lastTime) / 1000.0f;
     lastTime = currentTime;
 
+    UI_UpdateSmoothScrolling(root, dt);
+
     lua_getglobal(L, "on_tick");
     if (lua_isfunction(L, -1)) {
       lua_pushnumber(L, dt);
