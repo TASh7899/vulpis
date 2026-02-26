@@ -1,11 +1,13 @@
 #include "font.h"
 #include <SDL_gamecontroller.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <freetype/fttypes.h>
 #include <iostream>
 #include <ft2build.h>
 #include <lauxlib.h>
+#include <limits>
 #include <memory>
 #include <ostream>
 #include <sys/types.h>
@@ -21,6 +23,21 @@
 // file local global font storage
 static std::unordered_map<int, std::unique_ptr<Font>> g_fonts;
 static int g_nextFontId = 1;
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ DPI SCALING HELPERS ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+static float g_dpiscale = 1.0f;
+
+void UI_SetDPIScale(float scale) {
+  g_dpiscale = scale;
+}
+
+float UI_GetDPIScale() {
+  return g_dpiscale;
+}
+
+
 
 // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 // ╏ FALLBACK FONT MANAGEMENT ╏
@@ -194,7 +211,7 @@ const Character* Font::LoadGlyph(uint32_t c) {
     FT_Set_Transform(face, nullptr, nullptr);
   }
 
-  if (FT_Load_Char(face, c, FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP)) {
+  if (FT_Load_Char(face, c, FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP | FT_LOAD_TARGET_LIGHT)) {
     return nullptr;
   }
 
@@ -324,7 +341,9 @@ int l_load_font(lua_State* L) {
   }
 
   const char* path = luaL_checkstring(L, 1);
-  int size = luaL_optinteger(L, 2, 16);
+  int baseSize = luaL_optinteger(L, 2, 16);
+
+  int actualSize = std::round(baseSize * UI_GetDPIScale());
 
   int styleFlags = 0;
   if (lua_istable(L, 3)) {
@@ -341,7 +360,7 @@ int l_load_font(lua_State* L) {
     lua_pop(L, 1);
   }
 
-  auto [id, font] = UI_LoadFont(path, size, styleFlags);
+  auto [id, font] = UI_LoadFont(path, actualSize, styleFlags);
   if (!font || id < 0) {
     // Return nil + error message so Lua knows it failed
     lua_pushnil(L);

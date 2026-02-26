@@ -175,6 +175,11 @@ int main(int argc, char* argv[]) {
   }
   SDL_GetWindowSize(window, &winW, &winH);
 
+  int drawW, drawH;
+  SDL_GL_GetDrawableSize(window, &drawW, &drawH);
+  float dpiScale = (float)drawW / (float)winW;
+  UI_SetDPIScale(dpiScale);
+
   //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
   //          ╏                  END OF WINDOW SECTION                  ╏
   //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛

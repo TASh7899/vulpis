@@ -2,6 +2,7 @@
 #include "commands.h"
 #include <SDL_video.h>
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
@@ -61,6 +62,9 @@ OpenGLRenderer::OpenGLRenderer(SDL_Window* win) : window(win) {
   unsigned char whitePixel[] = { 255, 255, 255, 255 };
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, whitePixel);
 
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
   currentTextureID = whiteTexture;
 }
 
@@ -119,6 +123,7 @@ void OpenGLRenderer::beginFrame() {
   SDL_GL_GetDrawableSize(window, &drawableW, &drawableH);
   glViewport(0, 0, drawableW, drawableH);
 
+  
   glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -163,19 +168,25 @@ void OpenGLRenderer::flush() {
 }
 
 void OpenGLRenderer::submit(const RenderCommandList& list) {
-  for (const auto& cmd : list.commands) {
-    if (std::holds_alternative<DrawRectCommand>(cmd)) {
+  float dpiScale = UI_GetDPIScale();
 
+  auto snap = [dpiScale](float val) {
+    return std::round(val * dpiScale) / dpiScale;
+  };
+
+  for (const auto& cmd : list.commands) {
+
+    if (std::holds_alternative<DrawRectCommand>(cmd)) {
       if (currentTextureID != whiteTexture) {
         flush();
         currentTextureID = whiteTexture;
       }
 
       const auto& data = std::get<DrawRectCommand>(cmd);
-      float x = data.rect.x;
-      float y = data.rect.y;
-      float w = data.rect.w;
-      float h = data.rect.h;
+      float x = snap(data.rect.x);
+      float y = snap(data.rect.y);
+      float w = snap(data.rect.w);
+      float h = snap(data.rect.h);
       Color c = data.color;
 
       // triangle 1
@@ -193,7 +204,8 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       const auto& data = std::get<DrawTextCommand>(cmd);
       if (!data.font) continue;
 
-      float fSize = (float)data.font->GetSize();
+
+      float fSize = (float)data.font->GetSize() / dpiScale;
 
       float underlineY = data.y + (fSize*0.1f);
       float strikeThroughY = data.y - (data.font->GetAscent() * 0.4f);
@@ -212,8 +224,8 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         currentTextureID = fontTex;
       }
 
-      float cursorX = data.x;
-      float cursorY = data.y;
+      float cursorX = snap(data.x);
+      float cursorY = snap(data.y);
       float textStartX = cursorX;
 
       std::vector<uint32_t> codepoints = Font::DecodeUTF8(data.text);
@@ -226,33 +238,33 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
           currentTextureID = ch.TextureID;
         }
 
-        float xpos = cursorX + ch.BearingX;
-        float ypos = cursorY + (ch.SizeY - ch.BearingY);
-        float w = (float)ch.SizeX;
-        float h = (float)ch.SizeY;
+        float xpos = snap(cursorX + (ch.BearingX / dpiScale));
+        float ypos = snap(cursorY + ((ch.SizeY - ch.BearingY) / dpiScale));
+        float w = (float)ch.SizeX / dpiScale;
+        float h = (float)ch.SizeY / dpiScale;
 
 
-          float left   = xpos;
-          float right  = xpos + w;
-          float top    = ypos - h;
-          float bottom = ypos;
+        float left   = xpos;
+        float right  = xpos + w;
+        float top    = ypos - h;
+        float bottom = ypos;
 
-          // Triangle 1 (Top-Right -> Bottom-Right -> Bottom-Left)
-          vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
-          vertices.push_back({ right,              bottom, ch.uMax, ch.vMax, data.color });
-          vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
+        // Triangle 1 (Top-Right -> Bottom-Right -> Bottom-Left)
+        vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
+        vertices.push_back({ right,              bottom, ch.uMax, ch.vMax, data.color });
+        vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
 
-          // Triangle 2 (Bottom-Left -> Top-Left -> Top-Right)
-          vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
-          vertices.push_back({ left,  top,    ch.uMin, ch.vMin, data.color });
-          vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
+        // Triangle 2 (Bottom-Left -> Top-Left -> Top-Right)
+        vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
+        vertices.push_back({ left,  top,    ch.uMin, ch.vMin, data.color });
+        vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
 
-        cursorX += (ch.Advance >> 6);
+        cursorX += ((ch.Advance >> 6) / dpiScale);
       }
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ LOGIC FOR UNDERLINE OR STRIKE LINE ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+      // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+      // ╏ LOGIC FOR UNDERLINE OR STRIKE LINE ╏
+      // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
       if (data.decoration != TextDecoration::None) {
         if (currentTextureID != whiteTexture) {
           flush();

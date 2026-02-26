@@ -80,3 +80,8 @@ void UI_ShutdownFonts();
 int l_load_font(lua_State* L);
 int l_draw_text(lua_State* L);
 
+// DPI Scale helper
+void UI_SetDPIScale(float scale);
+float UI_GetDPIScale();
+
+
