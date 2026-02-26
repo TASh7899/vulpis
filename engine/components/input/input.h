@@ -8,4 +8,7 @@ namespace Input {
   // handle all type of events like mouse clicks
   void handleEvent(lua_State* L, SDL_Event& event, Node* root);
 
+  void init();
+  void updateState();
+
 }

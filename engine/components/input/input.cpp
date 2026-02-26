@@ -1,11 +1,19 @@
 #include "input.h"
 #include <SDL_events.h>
+#include <SDL_keyboard.h>
+#include <SDL_keycode.h>
 #include <SDL_mouse.h>
+#include <SDL_scancode.h>
 #include <SDL_stdinc.h>
 #include <algorithm>
 #include <iostream>
+#include <iterator>
+#include <lauxlib.h>
 #include <lua.h>
 #include <vector>
+#include <cstring>
+
+#include "../../scripting/regsitry.h"
 
 namespace Input {
   static Node* draggedScrollbarNode = nullptr;
@@ -14,6 +22,23 @@ namespace Input {
   static int dragInitialMouseX = 0;
   static int dragInitialMouseY = 0;
 
+  static int numKeys = 0;
+  static const Uint8* currentKeyStates = nullptr;
+  static Uint8* previousKeyStates = nullptr;
+
+  void init() {
+    currentKeyStates = SDL_GetKeyboardState(&numKeys);
+
+    previousKeyStates = new Uint8[numKeys];
+    std::memset(previousKeyStates, 0, numKeys);
+    SDL_StartTextInput();
+  }
+
+  void updateState() {
+    if (currentKeyStates && previousKeyStates) {
+      std::memcpy(previousKeyStates, currentKeyStates, numKeys);
+    }
+  }
 
   Node* hitTest(Node* root, int x, int y, Node* ignore) {
     if (!root || root == ignore) return nullptr;
@@ -300,5 +325,56 @@ namespace Input {
         }
       }
     }
+
+    else if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
+      lua_getglobal(L, "on_key_down");
+      if (lua_isfunction(L, -1)) {
+        lua_pushstring(L, SDL_GetKeyName(event.key.keysym.sym));
+
+        SDL_Keymod mod = SDL_GetModState();
+        lua_newtable(L);
+        lua_pushboolean(L, mod & KMOD_CTRL); lua_setfield(L, -2, "ctrl");
+        lua_pushboolean(L, mod & KMOD_SHIFT); lua_setfield(L, -2, "shift");
+        lua_pushboolean(L, mod & KMOD_ALT); lua_setfield(L, -2, "alt");
+
+        if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+          std::cerr << "Key Down Error: " << lua_tostring(L, -1) << std::endl;
+          lua_pop(L, 1);
+        }
+
+      }
+      else {
+        lua_pop(L, 1);
+      }
+    }
+
+    else if (event.type == SDL_TEXTINPUT) {
+      lua_getglobal(L, "on_text_input");
+      if (lua_isfunction(L, -1)) {
+        lua_pushstring(L, event.text.text);
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+          std::cerr << "Text Input Error: " << lua_tostring(L, -1) << std::endl;
+          lua_pop(L, 1);
+        }
+      } else {
+        lua_pop(L, 1);
+      }
+    }
   }
+
+
+  int l_isKeyHeld(lua_State* L) {
+    SDL_Scancode code = SDL_GetScancodeFromName(luaL_checkstring(L, 1));
+    lua_pushboolean(L, currentKeyStates && currentKeyStates[code]);
+    return 1;
+  }
+
+  int l_isKeyJustPressed(lua_State* L) {
+    SDL_Scancode code = SDL_GetScancodeFromName(luaL_checkstring(L, 1));
+    lua_pushboolean(L, currentKeyStates && currentKeyStates[code] && !previousKeyStates[code]);
+    return 1;
+  }
+
+  AutoRegisterLua regKeyHeld("isKeyHeld", l_isKeyHeld);
+  AutoRegisterLua regKeyPressed("isKeyJustPressed", l_isKeyJustPressed);
 }

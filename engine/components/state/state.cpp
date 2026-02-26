@@ -2,6 +2,9 @@
 #include <lauxlib.h>
 #include <lua.h>
 #include <variant>
+#include "../../scripting/regsitry.h"
+#include <SDL2/SDL.h>
+
 
 void pushStateValue(lua_State* L, const StateValue& val) {
   if (std::holds_alternative<int>(val)) {
@@ -74,5 +77,11 @@ void registerStateBindings(lua_State* L) {
 }
 
 
+int l_markDirty(lua_State* L) {
+    // Safely forces the StateManager to become dirty by setting a dummy value
+    StateManager::instance().setState("__force_redraw", (int)SDL_GetTicks());
+    return 0;
+}
 
+AutoRegisterLua regMarkDirty("markDirty", l_markDirty);
 

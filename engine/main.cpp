@@ -249,24 +249,15 @@ int main(int argc, char* argv[]) {
   //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
   //          ╏                    MAIN PROGRAM LOOP                    ╏
   //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  
+  Input::init();
   while (running) {
 
     Uint32 currentTime = SDL_GetTicks();
     float dt = (currentTime - lastTime) / 1000.0f;
     lastTime = currentTime;
 
-    UI_UpdateSmoothScrolling(root, dt);
-
-    lua_getglobal(L, "on_tick");
-    if (lua_isfunction(L, -1)) {
-      lua_pushnumber(L, dt);
-      if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-        std::cerr << "on_tick Error " << lua_tostring(L, -1) << std::endl;
-        lua_pop(L, 1);
-      }
-    } else {
-      lua_pop(L, 1);
-    }
+    Input::updateState();
 
     // HANDLING SDL EVENTS
     while (SDL_PollEvent(&event)) {
@@ -281,6 +272,19 @@ int main(int argc, char* argv[]) {
         winH = event.window.data2;
         root->makeLayoutDirty();
       }
+    }
+
+    UI_UpdateSmoothScrolling(root, dt);
+
+    lua_getglobal(L, "on_tick");
+    if (lua_isfunction(L, -1)) {
+      lua_pushnumber(L, dt);
+      if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+        std::cerr << "on_tick Error " << lua_tostring(L, -1) << std::endl;
+        lua_pop(L, 1);
+      }
+    } else {
+      lua_pop(L, 1);
     }
 
     // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
@@ -347,6 +351,7 @@ int main(int argc, char* argv[]) {
 
     renderer.submit(cmdList);
     renderer.endFrame();
+
   }
 
   UI_ShutdownFonts();
