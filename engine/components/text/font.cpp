@@ -106,13 +106,20 @@ Font* UI_GetFontById(int id) {
 
 
 
-
 //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 //          ╏                 FONT CLASS CONSTRUCTORS                 ╏
 //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
-Font::Font(const std::string& fontPath, unsigned int fontSize, int styleFlags) : 
-  textureID(0), lineHeight(0), ascent(0), fontPath(fontPath), fontSize(fontSize), styleFlags(styleFlags) {
-  Load(fontPath, fontSize);
+Font::Font(const std::string& fontPath, unsigned int requestedFontSize, int styleFlags) : 
+  textureID(0), lineHeight(0), ascent(0), fontPath(fontPath), fontSize(requestedFontSize), styleFlags(styleFlags) {
+
+  this->dpiScale = UI_GetDPIScale();
+
+  unsigned int physicalSize = std::round(requestedFontSize * dpiScale);
+  Load(fontPath, physicalSize);
+}
+
+float Font::GetLogicalAdvance(uint32_t c) {
+  return (float)(GetCharacter(c).Advance >> 6) / dpiScale;
 }
 
 Font::~Font() {
@@ -129,15 +136,15 @@ Font::~Font() {
 // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 // ╏ MAIN FUNCTION TO GET FONT POINTER AND ITS ID FROM GLOBAL FONT STORAGE ╏
 // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
-std::pair<int, Font*> UI_LoadFont(const std::string &path, int size, int styleFlags) {
+std::pair<int, Font*> UI_LoadFont(const std::string &path, int logicalSize, int styleFlags) {
   for (const auto& [id, font] : g_fonts ) {
-    if (font->GetPath() == path && font->GetSize() == (unsigned int)size &&  font->GetStyle() == styleFlags) {
+    if (font->GetPath() == path && font->GetLogicalSize() == logicalSize &&  font->GetStyle() == styleFlags) {
       return {id, font.get()};
     }
   }
 
   int id = g_nextFontId++;
-  auto font = std::make_unique<Font>(path, size, styleFlags);
+  auto font = std::make_unique<Font>(path, logicalSize, styleFlags);
   Font* fontptr = font.get();
   g_fonts[id] = std::move(font);
 
@@ -211,7 +218,15 @@ const Character* Font::LoadGlyph(uint32_t c) {
     FT_Set_Transform(face, nullptr, nullptr);
   }
 
-  if (FT_Load_Char(face, c, FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP | FT_LOAD_TARGET_LIGHT)) {
+  // Disable hinting on macOS for smooth Retina text!
+  int loadFlags = FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP;
+#ifdef __APPLE__
+  loadFlags |= FT_LOAD_NO_HINTING;
+#else
+  loadFlags |= FT_LOAD_TARGET_LIGHT;
+#endif
+
+  if (FT_Load_Char(face, c, loadFlags)) {
     return nullptr;
   }
 
@@ -343,7 +358,6 @@ int l_load_font(lua_State* L) {
   const char* path = luaL_checkstring(L, 1);
   int baseSize = luaL_optinteger(L, 2, 16);
 
-  int actualSize = std::round(baseSize * UI_GetDPIScale());
 
   int styleFlags = 0;
   if (lua_istable(L, 3)) {
@@ -360,7 +374,7 @@ int l_load_font(lua_State* L) {
     lua_pop(L, 1);
   }
 
-  auto [id, font] = UI_LoadFont(path, actualSize, styleFlags);
+  auto [id, font] = UI_LoadFont(path, baseSize, styleFlags);
   if (!font || id < 0) {
     // Return nil + error message so Lua knows it failed
     lua_pushnil(L);

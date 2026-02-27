@@ -612,16 +612,16 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     if (font) {
       n->font = font;
       float startX = renderX + n->paddingLeft;
-      float cursorY = renderY + n->paddingTop + n->font->GetAscent();
+      float cursorY = renderY + n->paddingTop + n->font->GetLogicalAscent();
       float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
 
       for (const std::string& line : n->computedLines) {
         float lineWidth = 0;
         for (char c : line) {
-          lineWidth += (n->font->GetCharacter(c).Advance >> 6);
+          lineWidth += n->font->GetLogicalAdvance(c);
         }
         float xOffset = 0;
-        if (n->textAlign == TextAlign::Center) {
+        if (n->textAlign == TextAlign::Center)  {
           xOffset = (contentWidth - lineWidth) / 2.0f;
         } else if (n->textAlign == TextAlign::Right) {
           xOffset = contentWidth - lineWidth;
@@ -761,7 +761,7 @@ TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float 
   if (!font || text.empty()) return result;
   if (maxWidth <= 0) maxWidth = 1;
 
-  float lineHeight = (float)font->GetLineHeight();
+  float lineHeight = (float)font->GetLogicalLineHeight();
   float currentY = lineHeight;
 
   std::vector<uint32_t> codepoints = Font::DecodeUTF8(text);
@@ -802,7 +802,7 @@ TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float 
       wordWidth = 0;
     } else {
       appendCP(word, c);
-      wordWidth += (font->GetCharacter(c).Advance / 64.0f);
+      wordWidth += (font->GetLogicalAdvance(c));
     }
   }
   if (!currentLine.empty()) {
@@ -828,7 +828,7 @@ void computeTextLayout(Node* n) {
   TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
 
   n->computedLines = res.lines;
-  n->computedLineHeight = (float)n->font->GetLineHeight();
+  n->computedLineHeight = (float)n->font->GetLogicalLineHeight();
 }
 
 void updateTextLayout(Node* root) {

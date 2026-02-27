@@ -205,10 +205,10 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       if (!data.font) continue;
 
 
-      float fSize = (float)data.font->GetSize() / dpiScale;
+      float fSize = (float)data.font->GetLogicalSize();
 
       float underlineY = data.y + (fSize*0.1f);
-      float strikeThroughY = data.y - (data.font->GetAscent() * 0.4f);
+      float strikeThroughY = std::round(data.y - (data.font->GetLogicalAscent() * 0.4f));
 
       float decorationThickness;
       if (data.decoration == TextDecoration::StrikeThrough) {

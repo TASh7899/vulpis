@@ -46,12 +46,17 @@ class Font {
     static void ResetFallback();
     static const std::vector<Font*>&  GetFallbacks();
 
+    // pre calculated logical values for font
+    unsigned int GetLogicalSize() const { return logicalSize; }
+    float GetLogicalLineHeight() const { return (float)lineHeight / dpiScale; }
+    float GetLogicalAscent() const { return (float)ascent / dpiScale; }
+    float GetLogicalAdvance(uint32_t c);
 
   private:
     unsigned int textureID;
     unsigned int lineHeight;
     unsigned int ascent;
-  
+
     std::string fontPath;
     unsigned int fontSize;
     int styleFlags;
@@ -65,6 +70,9 @@ class Font {
     void Load(const std::string& path, unsigned int size);
     const Character* LoadGlyph(uint32_t c);
     const Character* GetCharInternal(uint32_t c);
+
+    unsigned int logicalSize;
+    float dpiScale;
 };
 
 
