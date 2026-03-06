@@ -2,10 +2,12 @@
 #include <SDL2/SDL_pixels.h>
 #include <SDL2/SDL_rect.h>
 #include <SDL2/SDL_render.h>
+#include <SDL_timer.h>
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <lauxlib.h>
 #include <lua.h>
 #include <string>
@@ -160,6 +162,11 @@ void parseEvents(lua_State *L, Node *n, int idx) {
   getCallback("onDragEnd", n->onDragEndRef);
   getCallback("onDrag", n->onDragRef);
 
+  getCallback("onTextInput", n->onTextInputRef);
+  getCallback("onKeyDown", n->onKeyDownRef);
+  getCallback("onFocus", n->onFocusRef);
+  getCallback("onBlur", n->onBlurRef);
+  
 }
 
 
@@ -434,6 +441,13 @@ Node* buildNode(lua_State* L, int idx) {
     n->overflowHidden = true;
   }
 
+  n->wordWrap = true;
+  if (hasStyle) {
+    lua_getfield(L, -1, "wordWrap");
+    if (lua_isboolean(L, -1)) n->wordWrap = lua_toboolean(L, -1);
+    lua_pop(L, 1);
+  }
+
   if (hasStyle) {
     lua_getfield(L, -1, "BGColor");
     if (lua_isstring(L, -1)) {
@@ -461,6 +475,19 @@ Node* buildNode(lua_State* L, int idx) {
   lua_pop(L, 1);
 
   parseEvents(L, n, idx);
+
+  lua_getfield(L, idx, "focusable");
+  if (lua_isboolean(L, -1)) n->isFocusable = lua_toboolean(L, -1);
+  lua_pop(L, 1);
+
+  lua_getfield(L, idx, "isFocused");
+  if (lua_isboolean(L, -1)) n->isFocused = lua_toboolean(L, -1);
+  lua_pop(L, 1);
+
+
+  lua_getfield(L, idx, "cursorPosition");
+  if (lua_isnumber(L, -1)) n->cursorPosition = lua_tointeger(L, -1);
+  lua_pop(L, 1);
 
   lua_getfield(L, idx, "children");
   if (lua_istable(L, -1)) {
@@ -498,6 +525,8 @@ void resolveStyles(Node* n, int parentW, int parentH) {
     resolveStyles(c, contentW, contentH);
   }
 }
+
+void computeTextLayout(Node* n);
 
 void measure(Node* n) {
   if (n->type == "vbox") {
@@ -542,6 +571,20 @@ void measure(Node* n) {
     if (n->w == 0) n->w = totalW + n->paddingRight + n->paddingLeft;
     if (n->h == 0) n->h = maxH + n->paddingTop + n->paddingBottom;
   }
+
+  if (n->type == "text") {
+    computeTextLayout(n);
+
+    // If height isn't explicitly fixed in Lua, calculate it from the lines
+    if (n->heightStyle.value == 0) {
+      n->h = (n->computedLines.size() * n->computedLineHeight) + n->paddingTop + n->paddingBottom;
+    }
+    // If width isn't fixed, you can also calculate max line width here
+    if (n->widthStyle.value == 0) {
+      // (Optional logic to set n->w based on longest line)
+    }
+  }
+
 }
 
 void layout(Node* n, int x, int y) {
@@ -600,6 +643,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   // Make the dragged ghost slightly transparent (70% opacity)
   float alphaMultiplier = (isDragPass && treatAsDragged) ? 0.7f : 1.0f;
 
+
   if (n->hasBackground) {
     list.push(DrawRectCommand{
         {renderX, renderY, n->w, n->h},
@@ -607,13 +651,66 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
         });
   }
 
+
+  bool applyClip = false;
+  if (n->overflowHidden) {
+    if (!isDragPass) {
+      applyClip = true; // Clip normally for base UI
+    } else if (treatAsDragged && !n->isDragging) {
+      applyClip = true; // Clip inner children of the dragged node
+    }
+  }
+
+  if (applyClip) {
+    list.push(PushClipCommand{{renderX, renderY, n->w, n->h}});
+  }
+
+
   if (n->type == "text" && !n->computedLines.empty()) {
     Font* font = n->font ? n->font : UI_GetFontById(n->fontId);
     if (font) {
       n->font = font;
-      float startX = renderX + n->paddingLeft;
-      float cursorY = renderY + n->paddingTop + n->font->GetLogicalAscent();
       float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
+      float cursorOffsetX = 0;
+
+      if (n->cursorPosition >= 0) {
+        std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
+        for (int i = 0; i < std::min((int)codepoints.size(), n->cursorPosition); i++) {
+          cursorOffsetX += (font->GetCharacter(codepoints[i]).Advance >> 6);
+        }
+
+        // autp scrolling logic, scrolling when content width is bigger
+        if (cursorOffsetX - n->scrollX > contentWidth) {
+          //if current content with scroll is bigger than contentWidth then 
+          //scroll the amount of overflow plus 1 for padding
+          n->scrollX = cursorOffsetX - contentWidth + 1.0f;
+        } else if (cursorOffsetX < n->scrollX) {
+          // cursor is outside in left area make it inside the box
+          n->scrollX = cursorOffsetX;
+        }
+        if (n->scrollX < 0) n->scrollX = 0;
+      }
+
+      // apply the scrolling to start coordiantes
+      float startX = renderX + n->paddingLeft - n->scrollX;
+      float cursorY = renderY + n->paddingTop + n->font->GetLogicalAscent();
+
+      if (n->cursorPosition >= 0) {
+        float cursorOffsetX = 0;
+        int currentIdx = 0;
+
+        std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
+        for (int i = 0; i < std::min((int)codepoints.size(), n->cursorPosition); i++) {
+          cursorOffsetX += (font->GetCharacter(codepoints[i]).Advance >> 6);
+        }
+
+        if ((SDL_GetTicks() / 500) % 2 == 0) {
+          list.push(DrawRectCommand{
+              {startX + cursorOffsetX, renderY + n->paddingTop, 1.0f, n->computedLineHeight},
+              {n->textColor.r, n->textColor.g, n->textColor.b, 255}
+              });
+        }
+      }
 
       for (const std::string& line : n->computedLines) {
         float lineWidth = 0;
@@ -642,18 +739,6 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   }
 
   // Handle Clipping properly!
-  bool applyClip = false;
-  if (n->overflowHidden) {
-    if (!isDragPass) {
-      applyClip = true; // Clip normally for base UI
-    } else if (treatAsDragged && !n->isDragging) {
-      applyClip = true; // Clip inner children of the dragged node
-    }
-  }
-
-  if (applyClip) {
-    list.push(PushClipCommand{{renderX, renderY, n->w, n->h}});
-  }
 
   // Render children
   for (Node* c : n->children) {
@@ -759,7 +844,7 @@ TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float 
   result.height = 0;
 
   if (!font || text.empty()) return result;
-  if (maxWidth <= 0) maxWidth = 1;
+  if (maxWidth <= 0) maxWidth = 1.0f;
 
   float lineHeight = (float)font->GetLogicalLineHeight();
   float currentY = lineHeight;
@@ -775,34 +860,59 @@ TextLayoutResult calculateTextLayout(const std::string& text, Font* font, float 
     uint32_t c = (i < codepoints.size()) ? codepoints[i] : 0;
 
     if (c == ' ' || c == '\n' || c == 0) {
-      float spaceW = (c == ' ') ? (font->GetCharacter(' ').Advance / 64.0f) : 0;
+      float spaceW = (c == ' ') ? font->GetLogicalAdvance(' ') : 0.0f;
 
       if (currentLineWidth + wordWidth <= maxWidth) {
         currentLine += word;
         currentLineWidth += wordWidth;
       } else {
-        result.lines.push_back(currentLine);
-        result.width = std::max(result.width, currentLineWidth); // Track max width
-        currentLine = word;
-        currentLineWidth = wordWidth;
-        currentY += lineHeight;
+        if (!currentLine.empty()) {
+          result.lines.push_back(currentLine);
+          result.width = std::max(result.width, currentLineWidth);
+          currentLine = "";
+          currentLineWidth = 0.0f;
+          currentY += lineHeight;
+        }
+        currentLine += word;
+        currentLineWidth += wordWidth;
       }
 
       if (c == ' ') {
-        currentLine += ' ';
-        currentLineWidth += spaceW;
+        if (currentLineWidth + spaceW <= maxWidth) {
+          currentLine += ' ';
+          currentLineWidth += spaceW;
+        }
       } else if (c == '\n') {
         result.lines.push_back(currentLine);
         result.width = std::max(result.width, currentLineWidth);
         currentLine = "";
-        currentLineWidth = 0;
+        currentLineWidth = 0.0f;
         currentY += lineHeight;
       }
       word.clear();
-      wordWidth = 0;
+      wordWidth = 0.0f;
     } else {
+      float charAdvance = font->GetLogicalAdvance(c);
+
+      if (wordWidth > 0 && wordWidth + charAdvance > maxWidth) {
+        if (!currentLine.empty()) {
+          result.lines.push_back(currentLine);
+          result.width = std::max(result.width, currentLineWidth);
+          currentLine = "";
+          currentLineWidth = 0.0f;
+          currentY += lineHeight;
+        }
+
+        result.lines.push_back(word);
+        result.width = std::max(result.width, wordWidth);
+        word.clear();
+        wordWidth = 0.0f;
+        currentY += lineHeight;
+      }
+
       appendCP(word, c);
-      wordWidth += (font->GetLogicalAdvance(c));
+      wordWidth += charAdvance;
+
     }
   }
   if (!currentLine.empty()) {
@@ -824,7 +934,7 @@ void computeTextLayout(Node* n) {
     return;
   }
 
-  float maxWidth = n->w - (n->paddingLeft + n->paddingRight);
+  float maxWidth = n->wordWrap ? (n->w - (n->paddingLeft + n->paddingRight)) : std::numeric_limits<float>::max();;
   TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
 
   n->computedLines = res.lines;

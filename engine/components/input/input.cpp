@@ -135,7 +135,19 @@ namespace Input {
     }
   }
 
+  Node* findFocusedNode(Node* root) {
+    if (!root) return nullptr;
+    if (root->isFocused) return root;
+    for (Node* c : root->children) {
+      Node* f = findFocusedNode(c);
+      if (f) return f;
+    }
+    return nullptr;
+  }
+
+
   void handleEvent(lua_State *L, SDL_Event &event, Node *root) {
+
     if (event.type == SDL_MOUSEMOTION) {
       int mx = event.motion.x;
       int my = event.motion.y;
@@ -276,6 +288,40 @@ namespace Input {
       }
 
       if (!eventConsumed && button == SDL_BUTTON_LEFT) {
+        Node* focusCheck = target;
+        bool focusHandle = false;
+        
+        while (focusCheck) {
+          if (focusCheck->isFocusable) {
+            Node* focusedNode = findFocusedNode(root);
+            if (focusedNode != focusCheck) {
+              if (focusedNode && focusedNode->onBlurRef != -2) {
+                lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onBlurRef);
+                if (lua_isfunction(L, -1)) lua_pcall(L, 0, 0, 0);
+                else lua_pop(L, 1);
+              }
+              focusedNode = focusCheck;
+              if (focusedNode->onFocusRef != -2) {
+                lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onFocusRef);
+                if (lua_isfunction(L, -1)) lua_pcall(L, 0, 0, 0);
+                else lua_pop(L, 1);
+              }
+            }
+            focusHandle = true;
+            break;
+          }
+          focusCheck = focusCheck->parent;
+        }
+
+        if (!focusHandle) {
+          Node* focusedNode = findFocusedNode(root);
+          if (focusedNode && focusedNode->onBlurRef != -2) {
+            lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onBlurRef);
+            if (lua_isfunction(L, -1)) lua_pcall(L, 0, 0, 0);
+            else lua_pop(L, 1);
+          }
+        }
+
         Node* dragCheck = target;
         while (dragCheck) {
           if (dragCheck->isDraggable) {
@@ -326,38 +372,40 @@ namespace Input {
       }
     }
 
-    else if (event.type == SDL_KEYDOWN && event.key.repeat == 0) {
-      lua_getglobal(L, "on_key_down");
-      if (lua_isfunction(L, -1)) {
-        lua_pushstring(L, SDL_GetKeyName(event.key.keysym.sym));
-
-        SDL_Keymod mod = SDL_GetModState();
-        lua_newtable(L);
-        lua_pushboolean(L, mod & KMOD_CTRL); lua_setfield(L, -2, "ctrl");
-        lua_pushboolean(L, mod & KMOD_SHIFT); lua_setfield(L, -2, "shift");
-        lua_pushboolean(L, mod & KMOD_ALT); lua_setfield(L, -2, "alt");
-
-        if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
-          std::cerr << "Key Down Error: " << lua_tostring(L, -1) << std::endl;
+    else if (event.type == SDL_KEYDOWN) {  
+      Node* focusedNode = findFocusedNode(root);
+      if (focusedNode && focusedNode->onKeyDownRef != -2) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onKeyDownRef);
+        if (lua_isfunction(L, -1)) {
+          lua_pushstring(L, SDL_GetKeyName(event.key.keysym.sym));
+          SDL_Keymod mod = SDL_GetModState();
+          lua_newtable(L);
+          lua_pushboolean(L, mod & KMOD_CTRL); lua_setfield(L, -2, "ctrl");
+          lua_pushboolean(L, mod & KMOD_SHIFT); lua_setfield(L, -2, "shift");
+          lua_pushboolean(L, mod & KMOD_ALT); lua_setfield(L, -2, "alt");
+          if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
+            std::cerr << "Key Down Error: " << lua_tostring(L, -1) << std::endl;
+            lua_pop(L, 1);
+          }
+        } else {
           lua_pop(L, 1);
         }
-
-      }
-      else {
-        lua_pop(L, 1);
       }
     }
 
     else if (event.type == SDL_TEXTINPUT) {
-      lua_getglobal(L, "on_text_input");
-      if (lua_isfunction(L, -1)) {
-        lua_pushstring(L, event.text.text);
-        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
-          std::cerr << "Text Input Error: " << lua_tostring(L, -1) << std::endl;
+      Node* focusedNode = findFocusedNode(root);
+      if (focusedNode && focusedNode->onTextInputRef != -2) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onTextInputRef);
+        if (lua_isfunction(L, -1)) {
+          lua_pushstring(L, event.text.text);
+          if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            std::cerr << "Text Input Error: " << lua_tostring(L, -1) << std::endl;
+            lua_pop(L, 1);
+          }
+        } else {
           lua_pop(L, 1);
         }
-      } else {
-        lua_pop(L, 1);
       }
     }
   }

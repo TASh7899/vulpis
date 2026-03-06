@@ -1,64 +1,67 @@
 local elements = {}
 
--- Helper to merge style tables
-function elements.mergeStyles(base, override)
+-- Helper to merge style tables (supports passing nil safely)
+function elements.mergeStyles(...)
 	local res = {}
-	for k, v in pairs(base or {}) do
-		res[k] = v
-	end
-	for k, v in pairs(override or {}) do
-		res[k] = v
+	for _, styleObj in ipairs({ ... }) do
+		if type(styleObj) == "table" then
+			for k, v in pairs(styleObj) do
+				res[k] = v
+			end
+		end
 	end
 	return res
 end
 
 -- Helper to merge child lists
-function elements.mergeChildren(listA, listB)
+function elements.mergeChildren(...)
 	local res = {}
-	if listA then
-		for _, child in ipairs(listA) do
-			table.insert(res, child)
-		end
-	end
-	if listB then
-		for _, child in ipairs(listB) do
-			table.insert(res, child)
+	for _, childList in ipairs({ ... }) do
+		if type(childList) == "table" then
+			for _, child in ipairs(childList) do
+				table.insert(res, child)
+			end
 		end
 	end
 	return res
 end
 
-function elements.Box(props)
+-- Core property extractor to prevent duplicating reserved keys
+local function buildBaseNode(props, defaultType)
 	props = props or {}
-	local t = props.type or "hbox"
 
-	-- The engine expects specific style keys like 'w', 'h', 'BGColor', etc.
-	-- We pass the style table through as-is.
 	local node = {
-		type = t,
+		type = props.type or defaultType,
 		style = props.style or {},
 		children = props.children or {},
-		onClick = props.onClick,
-		key = props.key,
 	}
 
+	for k, v in pairs(props) do
+		if k ~= "type" and k ~= "style" and k ~= "children" and k ~= "text" then
+			node[k] = v
+		end
+	end
+
 	return node
+end
+
+function elements.Box(props)
+	return buildBaseNode(props, "hbox")
 end
 
 function elements.VBox(props)
 	props = props or {}
 	props.type = "vbox"
-	return elements.Box(props)
+	return buildBaseNode(props, "vbox")
 end
 
 function elements.HBox(props)
 	props = props or {}
 	props.type = "hbox"
-	return elements.Box(props)
+	return buildBaseNode(props, "hbox")
 end
 
 function elements.Text(props, optionalStyle)
-	-- Support shorthand: elements.Text("Hello World") or elements.Text("Text", { color = "#FFF" })
 	if type(props) == "string" then
 		props = {
 			text = props,
@@ -66,16 +69,65 @@ function elements.Text(props, optionalStyle)
 		}
 	end
 
+	local node = buildBaseNode(props, "text")
+	node.text = props.text or ""
+
+	return node
+end
+
+function elements.Button(props)
+	if type(props) == "string" then
+		props = { text = props }
+	end
 	props = props or {}
 
-	local node = {
-		type = "text",
-		text = props.text or "",
-		style = props.style or {},
-		children = props.children or {},
-		onClick = props.onClick,
-		key = props.key,
+	-- Default styles combined into one table
+	local defaultStyle = {
+		paddingTop = 10,
+		paddingBottom = 10,
+		paddingLeft = 20,
+		paddingRight = 20,
+		BGColor = "#FFAC1C",
+		alignItems = "center",
+		justifyContent = "center",
+
+		-- Default text styles
+		color = "#000000",
 	}
+
+	-- Merge the user's unified style with the defaults
+	local mergedStyle = elements.mergeStyles(defaultStyle, props.style)
+
+	local textKeys = {
+		color = true,
+		fontSize = true,
+		fontFamily = true,
+		fontWeight = true,
+		fontStyle = true,
+		textDecoration = true,
+	}
+
+	local boxStyle = {}
+	local textStyle = {}
+
+	for k, v in pairs(mergedStyle) do
+		if textKeys[k] then
+			textStyle[k] = v
+		else
+			boxStyle[k] = v
+		end
+	end
+
+	local node = buildBaseNode(props, "hbox")
+	node.style = boxStyle
+
+	if props.text and not props.children then
+		local textNode = elements.Text({
+			text = props.text,
+			style = textStyle,
+		})
+		node.children = { textNode }
+	end
 
 	return node
 end

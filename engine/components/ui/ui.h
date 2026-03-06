@@ -113,6 +113,8 @@ struct Node {
   bool overflowHidden = true;
   bool overflowScroll = false;
 
+  bool wordWrap = true;
+
   float scrollX = 0.0f;
   float scrollY = 0.0f;
   float targetScrollX = 0.0f;
@@ -130,6 +132,19 @@ struct Node {
   int onDragStartRef = -2;
   int onDragRef = -2;
   int onDragEndRef = -2;
+
+  bool isFocusable = false;
+  bool isFocused = false;
+  int onTextInputRef = -2;
+  int onKeyDownRef = -2;
+  int onFocusRef = -2;
+  int onBlurRef = -2;
+  
+  
+  // Cursor state for rendering
+  int cursorPosition = -1; // -1 means no cursor/unfocused
+  int selectionStart = -1;
+  int selectionEnd = -1;
 
 
   int spacing = 0;
@@ -151,13 +166,14 @@ struct Node {
   int onRightClickRef = -2;
   bool isHovered = false;
 
+
   bool hasLeft = false; float leftVal = 0.0f;
   bool hasTop = false; float topVal = 0.0f;
   bool hasRight = false; float rightVal = 0.0f;
   bool hasBottom = false; float bottomVal = 0.0f;
 
   Node* hitTest(Node* root, int x, int y);
-  
+
   float scrollbarOpacity = 0.0f;
   float scrollbarTimer = 0.0f;
 
@@ -184,6 +200,9 @@ struct Node {
       parent->makeLayoutDirty();
     }
   }
+
+
+
 
   PositionType position = PositionType::Relative;
 };
@@ -228,3 +247,5 @@ std::string getVariantKey(FontWeight w, FontStyle s);
 void parseEvents(lua_State* L, Node* n, int idx);
 int getFlags(Node* node);
 void UI_UpdateSmoothScrolling(Node* n, float dt);
+
+void computeTextLayout(Node* n);

@@ -174,6 +174,8 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
     return std::round(val * dpiScale) / dpiScale;
   };
 
+  std::vector<Rect> clipStack;
+
   for (const auto& cmd : list.commands) {
 
     if (std::holds_alternative<DrawRectCommand>(cmd)) {
@@ -292,16 +294,33 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       flush();
       const auto& data = std::get<PushClipCommand>(cmd);
 
+      Rect currentClip = data.rect;
+      if (!clipStack.empty()) {
+        Rect parentClip = clipStack.back();
+
+        float x1 = std::max(currentClip.x, parentClip.x);
+        float y1 = std::max(currentClip.y, parentClip.y);
+        float x2 = std::min(currentClip.x + currentClip.w, parentClip.x + parentClip.w);
+        float y2 = std::min(currentClip.y + currentClip.h, parentClip.y + parentClip.h);
+
+        currentClip.x = x1;
+        currentClip.y = y1;
+        currentClip.w = std::max(0.0f, x2 - x1);
+        currentClip.h = std::max(0.0f, y2 - y1);
+      }
+
+      clipStack.push_back(currentClip);
+
       int drawW, drawH;
       SDL_GL_GetDrawableSize(window, &drawW, &drawH);
 
       float scaleX = (float)drawW / winWidth;
       float scaleY = (float)drawH / winHeight;
 
-      int scissorX = (float)(data.rect.x * scaleX);
-      int scissorY = (float)(drawH - (data.rect.y + data.rect.h) * scaleY);
-      int scissorW = (int)(data.rect.w * scaleX);
-      int scissorH = (int)(data.rect.h * scaleY);
+      int scissorX = (float)(currentClip.x * scaleX);
+      int scissorY = (float)(drawH - (currentClip.y + currentClip.h) * scaleY);
+      int scissorW = (int)(currentClip.w * scaleX);
+      int scissorH = (int)(currentClip.h * scaleY);
 
       glEnable(GL_SCISSOR_TEST);
       glScissor(scissorX, scissorY, scissorW, scissorH);
@@ -309,7 +328,29 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
 
     else if (std::holds_alternative<PopClipCommand>(cmd)) {
       flush();
-      glDisable(GL_SCISSOR_TEST);
+
+      if (!clipStack.empty()) {
+        clipStack.pop_back();
+      }
+
+      if (clipStack.empty()) {
+        glDisable(GL_SCISSOR_TEST);
+      } else {
+        Rect restoredClip = clipStack.back();
+
+        int drawW, drawH;
+        SDL_GL_GetDrawableSize(window, &drawW, &drawH);
+        float scaleX = (float)drawW / winWidth;
+        float scaleY = (float)drawH / winHeight;
+
+        int scissorX = (float)(restoredClip.x * scaleX);
+        int scissorY = (float)(drawH - (restoredClip.y + restoredClip.h) * scaleY);
+        int scissorW = (int)(restoredClip.w * scaleX);
+        int scissorH = (int)(restoredClip.h * scaleY);
+
+        glScissor(scissorX, scissorY, scissorW, scissorH);
+      }
+
     }
   }
 }
