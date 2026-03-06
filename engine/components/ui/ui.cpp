@@ -676,7 +676,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
       if (n->cursorPosition >= 0) {
         std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
         for (int i = 0; i < std::min((int)codepoints.size(), n->cursorPosition); i++) {
-          cursorOffsetX += (font->GetCharacter(codepoints[i]).Advance >> 6);
+          cursorOffsetX += font->GetLogicalAdvance(codepoints[i]);
         }
 
         // autp scrolling logic, scrolling when content width is bigger
@@ -701,7 +701,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
         std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
         for (int i = 0; i < std::min((int)codepoints.size(), n->cursorPosition); i++) {
-          cursorOffsetX += (font->GetCharacter(codepoints[i]).Advance >> 6);
+          cursorOffsetX += font->GetLogicalAdvance(codepoints[i]);
         }
 
         if ((SDL_GetTicks() / 500) % 2 == 0) {
