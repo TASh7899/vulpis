@@ -421,6 +421,7 @@ namespace Input {
           lua_pushboolean(L, mod & KMOD_CTRL); lua_setfield(L, -2, "ctrl");
           lua_pushboolean(L, mod & KMOD_SHIFT); lua_setfield(L, -2, "shift");
           lua_pushboolean(L, mod & KMOD_ALT); lua_setfield(L, -2, "alt");
+          lua_pushboolean(L, mod & KMOD_GUI); lua_setfield(L, -2, "gui");
           if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
             std::cerr << "Key Down Error: " << lua_tostring(L, -1) << std::endl;
             lua_pop(L, 1);
