@@ -654,10 +654,8 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
   bool applyClip = false;
   if (n->overflowHidden) {
-    if (!isDragPass) {
-      applyClip = true; // Clip normally for base UI
-    } else if (treatAsDragged && !n->isDragging) {
-      applyClip = true; // Clip inner children of the dragged node
+    if (!isDragPass || treatAsDragged) {
+      applyClip = true;
     }
   }
 
@@ -694,6 +692,33 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
       // apply the scrolling to start coordiantes
       float startX = renderX + n->paddingLeft - n->scrollX;
       float cursorY = renderY + n->paddingTop + n->font->GetLogicalAscent();
+
+      if (n->selectionStart >= 0 && n->selectionEnd >= 0 && n->selectionStart != n->selectionEnd) {
+        int selMin = std::min(n->selectionStart, n->selectionEnd);
+        int selMax = std::max(n->selectionStart, n->selectionEnd);
+
+        std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
+        selMin = std::max(0, std::min(selMin, (int)codepoints.size()));
+        selMax = std::max(0, std::min(selMax, (int)codepoints.size()));
+
+        float selStartX = 0;
+        float selWidth = 0;
+
+        for (int i = 0; i < selMax; i++) {
+          float adv = font->GetLogicalAdvance(codepoints[i]);
+          if (i < selMin) {
+            selStartX += adv;
+          } else {
+            selWidth += adv;
+          }
+        }
+
+        list.push(DrawRectCommand{
+            {startX + selStartX, renderY + n->paddingTop, selWidth, n->computedLineHeight},
+            {59, 130, 246, 128}
+            });
+
+      }
 
       if (n->cursorPosition >= 0) {
         float cursorOffsetX = 0;

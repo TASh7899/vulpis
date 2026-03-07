@@ -61,16 +61,89 @@ function elements.HBox(props)
 	return buildBaseNode(props, "hbox")
 end
 
-function elements.Text(props, optionalStyle)
+function elements.Text(props, optionalStyle, optionalProps)
 	if type(props) == "string" then
-		props = {
-			text = props,
-			style = optionalStyle or {},
-		}
+		local textString = props
+		props = optionalProps or {}
+		props.text = textString
+		props.style = optionalStyle or {}
 	end
 
 	local node = buildBaseNode(props, "text")
 	node.text = props.text or ""
+
+	if props.allowSelection then
+		local id = props.id
+		if not id then
+			local info = debug.getinfo(2, "Sl")
+			if info and info.short_src and info.currentline then
+				id = "auto_txt_" .. info.short_src .. tostring(info.currentline)
+			else
+				id = "default_selectable_text"
+			end
+		end
+
+		node.id = id
+		node.focusable = true
+
+		local isFocused = useState(id .. "_focus", false)
+		local cursor = useState(id .. "_cursor", -1)
+		local anchor = useState(id .. "_anchor", -1)
+
+		node.isFocused = isFocused
+		node.selectionStart = isFocused and anchor or -1
+		node.selectionEnd = isFocused and cursor or -1
+
+		node.onDragStart = function(mx, my, textIdx, clicks)
+			if textIdx >= 0 then
+				if clicks and clicks >= 2 then
+					setState(id .. "_cursor", #node.text)
+					setState(id .. "_anchor", 0)
+				else
+					local safeIdx = math.min(textIdx, #node.text)
+					setState(id .. "_cursor", safeIdx)
+					setState(id .. "_anchor", safeIdx)
+				end
+
+				setState(id .. "_focus", true)
+			end
+			if props.onDragStart then
+				props.onDragStart(mx, my, textIdx, clicks)
+			end
+		end
+
+		node.onDrag = function(dx, dy, mx, my, textIdx)
+			if textIdx >= 0 then
+				setState(id .. "_cursor", math.min(textIdx, #node.text))
+			end
+
+			if props.onDrag then
+				props.onDrag(dx, dy, mx, my, textIdx)
+			end
+		end
+
+		node.onBlur = function()
+			setState(id .. "_focus", false)
+			if props.onBlur then
+				props.onBlur()
+			end
+		end
+
+		node.onKeyDown = function(keyName, mods)
+			if (keyName == "c" or keyName == "C") and (mods.ctrl or mods.gui) then
+				local selMin = math.min(cursor, anchor)
+				local selMax = math.max(cursor, anchor)
+				if selMin ~= selMax then
+					local selectedText = string.sub(node.text, selMin + 1, selMax)
+					vulpis.setClipboardText(selectedText)
+				end
+			end
+
+			if props.onKeyDown then
+				props.onKeyDown(keyName, mods)
+			end
+		end
+	end
 
 	return node
 end

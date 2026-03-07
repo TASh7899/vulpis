@@ -10,6 +10,7 @@
 #include <iterator>
 #include <lauxlib.h>
 #include <lua.h>
+#include <pthread.h>
 #include <vector>
 #include <cstring>
 
@@ -40,6 +41,24 @@ namespace Input {
     }
   }
 
+  static int getTextIndexAtCoords(Node* n, int mx, int my) {
+    if (!n || n->type != "text" || !n->font) return -1;
+  
+    int startX = n->x + n->paddingLeft - n->scrollX;
+    std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
+    float currentX = startX;
+
+    for (size_t i = 0; i < codepoints.size(); i++ ) {
+      float adv = n->font->GetLogicalAdvance(codepoints[i]);
+      if (mx < currentX + (adv / 2.0)) {
+        return i;
+      }
+      currentX += adv;
+    }
+    return codepoints.size();
+  }
+
+
   Node* hitTest(Node* root, int x, int y, Node* ignore) {
     if (!root || root == ignore) return nullptr;
 
@@ -60,22 +79,37 @@ namespace Input {
     return root;
   }
 
-  void fireLuaEvent(lua_State* L, int ref, int dx = 0, int dy = 0) {
+
+
+  void fireDragEvent(lua_State* L, int ref, int dx, int dy, int mx, int my, int textIndex) {
     if (ref != -2) {
       lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
       if (lua_isfunction(L, -1)) {
-        lua_pushinteger(L, dx);
-        lua_pushinteger(L, dy);
-        if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
-          std::cout << "Drag Event Error: " << lua_tostring(L, -1) << std::endl;
-          lua_pop(L, 1);
+        lua_pushinteger(L, dx); lua_pushinteger(L, dy);
+        lua_pushinteger(L, mx); lua_pushinteger(L, my);
+        lua_pushinteger(L, textIndex);
+        if (lua_pcall(L, 5, 0, 0) != LUA_OK) {
+          std::cout << "Drag Event Error" << lua_tostring(L, -1) << std::endl;
+          lua_pop(L, -1);
         }
-      } else {
-        lua_pop(L, 1);
-      }
+      } else lua_pop(L, -1);
     }
   }
 
+  void fireMouseEvent(lua_State* L, int ref, int mx, int my, int textIndex, int clicks) {
+    if (ref != -2) {
+      lua_rawgeti(L, LUA_REGISTRYINDEX, ref);
+      if (lua_isfunction(L, -1)) {
+        lua_pushinteger(L, mx); lua_pushinteger(L, my);
+        lua_pushinteger(L, textIndex);
+        lua_pushinteger(L, clicks);
+        if (lua_pcall(L, 4, 0, 0) != LUA_OK) {
+          std::cout << "Mouse Event Error: " << lua_tostring(L, -1) << std::endl;
+          lua_pop(L, 1);
+        }
+      } else lua_pop(L, 1);
+    }
+  }
 
   void fireDragEndEvent(lua_State* L, int ref, const std::string& dropId, int dx, int dy) {
     if (ref != -2) {
@@ -171,10 +205,13 @@ namespace Input {
         int dx = mx - dragInitialMouseX;
         int dy = my - dragInitialMouseY;
 
-        activeDragNode->dragOffsetX = (float)dx;
-        activeDragNode->dragOffsetY = (float)dy;
+        if (activeDragNode->isDraggable) {
+          activeDragNode->dragOffsetX = (float)dx;
+          activeDragNode->dragOffsetY = (float)dy;
+        }
 
-        fireLuaEvent(L, activeDragNode->onDragRef, dx, dy);
+        int textIdx = getTextIndexAtCoords(activeDragNode, mx, my);
+        fireDragEvent(L, activeDragNode->onDragRef, dx, dy, mx, my, textIdx);
       }
 
       Node* target = hitTest(root, mx, my);
@@ -290,7 +327,7 @@ namespace Input {
       if (!eventConsumed && button == SDL_BUTTON_LEFT) {
         Node* focusCheck = target;
         bool focusHandle = false;
-        
+
         while (focusCheck) {
           if (focusCheck->isFocusable) {
             Node* focusedNode = findFocusedNode(root);
@@ -324,13 +361,14 @@ namespace Input {
 
         Node* dragCheck = target;
         while (dragCheck) {
-          if (dragCheck->isDraggable) {
+          if (dragCheck->isDraggable || dragCheck->onDragRef != -2 || dragCheck->onDragStartRef != -2) {
             activeDragNode = dragCheck;
             activeDragNode->isDragging = true;
             dragInitialMouseX = mx;
             dragInitialMouseY = my;
 
-            fireLuaEvent(L, activeDragNode->onDragStartRef);
+            int textIndex = getTextIndexAtCoords(activeDragNode, mx, my);
+            fireMouseEvent(L, activeDragNode->onDragStartRef, mx, my, textIndex, event.button.clicks);
             eventConsumed = true;
             break; // Stop bubbling up
           }
@@ -422,6 +460,26 @@ namespace Input {
     lua_pushboolean(L, currentKeyStates && currentKeyStates[code] && !previousKeyStates[code]);
     return 1;
   }
+
+  int l_setClipboardText(lua_State* L) {
+    const char* text = luaL_checkstring(L, 1);
+    SDL_SetClipboardText(text);
+    return 0;
+  }
+
+  int l_getClipboardText(lua_State* L) {
+    if (SDL_HasClipboardText()) {
+      char* text = SDL_GetClipboardText();
+      lua_pushstring(L, text);
+      SDL_free(text);
+      return 1;
+    }
+    lua_pushstring(L, "");
+    return 1;
+  }
+
+  AutoRegisterLua regSetClip("setClipboardText", l_setClipboardText);
+  AutoRegisterLua regGetClip("getClipboardText", l_getClipboardText);
 
   AutoRegisterLua regKeyHeld("isKeyHeld", l_isKeyHeld);
   AutoRegisterLua regKeyPressed("isKeyJustPressed", l_isKeyJustPressed);

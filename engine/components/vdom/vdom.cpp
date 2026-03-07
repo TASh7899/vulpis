@@ -414,6 +414,15 @@ namespace VDOM {
     if (lua_isnumber(L, -1)) n->cursorPosition = lua_tointeger(L, -1);
     lua_pop(L, 1);
 
+    lua_getfield(L, idx, "selectionStart");
+    if (lua_isnumber(L, -1)) n->selectionStart = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+    lua_getfield(L, idx, "selectionEnd");
+    if (lua_isnumber(L, -1)) n->selectionEnd = lua_tointeger(L, -1);
+    lua_pop(L, 1);
+
+
     updateCallback(L, idx, "onTextInput", n->onTextInputRef);
     updateCallback(L, idx, "onKeyDown", n->onKeyDownRef);
     updateCallback(L, idx, "onFocus", n->onFocusRef);
