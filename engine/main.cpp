@@ -5,6 +5,7 @@
 #include <SDL2/SDL_video.h>
 #include <SDL_stdinc.h>
 #include <SDL_timer.h>
+#include <cstdint>
 #include <iostream>
 #include <ostream>
 #include <string>
@@ -256,6 +257,11 @@ int main(int argc, char* argv[]) {
   //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   
   Input::init();
+
+  bool needsRedraw = true;
+  uint32_t lastCursorToggle = SDL_GetTicks();
+
+
   while (running) {
 
     Uint32 currentTime = SDL_GetTicks();
@@ -264,22 +270,28 @@ int main(int argc, char* argv[]) {
 
     Input::updateState();
 
-    // HANDLING SDL EVENTS
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_QUIT) {
-        running = false;
-      }
+    // smart event handling
+    if (SDL_WaitEventTimeout(&event, 16)) {
+      do {
+        needsRedraw = true;
+        if (event.type == SDL_QUIT) {
+          running = false;
+        }
+        Input::handleEvent(L, event, root);
 
-      Input::handleEvent(L, event, root);
-
-      if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
-        winW = event.window.data1;
-        winH = event.window.data2;
-        root->makeLayoutDirty();
-      }
+        if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+          winW = event.window.data1;
+          winH = event.window.data2;
+          root->makeLayoutDirty();
+        }
+      } while (SDL_PollEvent(&event));
     }
 
     UI_UpdateSmoothScrolling(root, dt);
+
+    if (root->isLayoutDirty || root->isPaintDirty) {
+      needsRedraw = true;
+    }
 
     lua_getglobal(L, "on_tick");
     if (lua_isfunction(L, -1)) {
@@ -296,6 +308,7 @@ int main(int argc, char* argv[]) {
     // ╏ RECONCILE TREE IF DIRTY ╏
     // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
     if (StateManager::instance().isDirty()) {
+      needsRedraw = true;
       lua_getglobal(L, "App");
       if (lua_isfunction(L, -1)) {
         if (lua_pcall(L, 0, 1, 0) != LUA_OK) {
@@ -327,36 +340,45 @@ int main(int argc, char* argv[]) {
       StateManager::instance().clearDirty();
     }
 
-
-    if (root->isLayoutDirty) {
-      solver->solve(root, {winW, winH});
-      updateTextLayout(root);
-      root->isLayoutDirty = false;
+    if (currentTime - lastCursorToggle >= 500) {
+      needsRedraw = true;
+      lastCursorToggle = currentTime;
     }
 
-    renderer.beginFrame();
-    RenderCommandList cmdList;
-    generateRenderCommands(root, cmdList);
-    UI_SetRenderCommandList(&cmdList);
+    if (needsRedraw) {
+      if (root->isLayoutDirty) {
+        solver->solve(root, {winW, winH});
+        updateTextLayout(root);
+        root->isLayoutDirty = false;
+      }
 
-    // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-    // ╏ on_render() FUNCTION ╏
-    // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
-    lua_getglobal(L, "on_render");
-    if (lua_isfunction(L, -1)) {
-      if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
-        std::cout << "Error in on_render: " << lua_tostring(L, -1) << std::endl;
+      root->isPaintDirty = false;
+
+      renderer.beginFrame();
+      RenderCommandList cmdList;
+      generateRenderCommands(root, cmdList);
+      UI_SetRenderCommandList(&cmdList);
+
+      // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+      // ╏ on_render() FUNCTION ╏
+      // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+      lua_getglobal(L, "on_render");
+      if (lua_isfunction(L, -1)) {
+        if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+          std::cout << "Error in on_render: " << lua_tostring(L, -1) << std::endl;
+          lua_pop(L, 1);
+        }
+      } else {
         lua_pop(L, 1);
       }
-    } else {
-      lua_pop(L, 1);
+
+      UI_SetRenderCommandList(nullptr);
+
+      renderer.submit(cmdList);
+      renderer.endFrame();
+
+      needsRedraw = false;
     }
-
-    UI_SetRenderCommandList(nullptr);
-
-    renderer.submit(cmdList);
-    renderer.endFrame();
-
   }
 
   UI_ShutdownFonts();
