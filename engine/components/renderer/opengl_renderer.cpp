@@ -210,7 +210,7 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       float fSize = (float)data.font->GetLogicalSize();
 
       float underlineY = data.y + (fSize*0.1f);
-      float strikeThroughY = std::round(data.y - (data.font->GetLogicalAscent() * 0.4f));
+      float strikeThroughY = data.y - (data.font->GetLogicalAscent() * 0.32f);
 
       float decorationThickness;
       if (data.decoration == TextDecoration::StrikeThrough) {
@@ -273,16 +273,21 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
           currentTextureID = whiteTexture;
         }
 
+        float decorationThickness = std::max(1.0f, std::round(fSize * 0.05f));
+
         float width = cursorX - textStartX;
-        float lineY = (data.decoration == TextDecoration::Underline) ? underlineY : strikeThroughY;
+        float rawY = (data.decoration == TextDecoration::Underline) ? underlineY : strikeThroughY;
+
+        float lineY = snap(rawY);
+        float lineBottom = snap(rawY + (decorationThickness / dpiScale));
 
         // triangle 1
         vertices.push_back({ textStartX + width, lineY,                       0.0f, 0.0f, data.color }); // TR
-        vertices.push_back({ textStartX + width, lineY + decorationThickness, 0.0f, 0.0f, data.color }); // BR
-        vertices.push_back({ textStartX,         lineY + decorationThickness, 0.0f, 0.0f, data.color }); // BL
+        vertices.push_back({ textStartX + width, lineBottom, 0.0f, 0.0f, data.color }); // BR
+        vertices.push_back({ textStartX,         lineBottom, 0.0f, 0.0f, data.color }); // BL
 
         // Triangle 2
-        vertices.push_back({ textStartX,         lineY + decorationThickness, 0.0f, 0.0f, data.color }); // BL
+        vertices.push_back({ textStartX,         lineBottom, 0.0f, 0.0f, data.color }); // BL
         vertices.push_back({ textStartX,         lineY,                       0.0f, 0.0f, data.color }); // TL
         vertices.push_back({ textStartX + width, lineY,                       0.0f, 0.0f, data.color }); // TR
 

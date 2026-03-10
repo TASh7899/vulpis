@@ -429,7 +429,7 @@ Node* buildNode(lua_State* L, int idx) {
   }
 
 
-  std::string overflow = getString("overflow", "hidden");
+  std::string overflow = getString("overflow", "visible");
   if (overflow == "visible") {
     n->overflowHidden = false;
     n->overflowScroll = false;
@@ -547,6 +547,9 @@ void measure(Node* n) {
       totalH -= n->spacing;
     }
 
+    n->contentH = totalH + n->paddingTop + n->paddingBottom;
+    n->contentW = maxW + n->paddingLeft + n->paddingRight;
+
     if (n->w == 0) n->w = maxW + n->paddingLeft + n->paddingRight;
     if (n->h == 0) n->h = totalH + n->paddingTop + n->paddingBottom;
   }
@@ -567,6 +570,9 @@ void measure(Node* n) {
     if (!n->children.empty()) {
       totalW -= n->spacing;
     }
+
+    n->contentW = totalW + n->paddingLeft + n->paddingRight;
+    n->contentH = maxH + n->paddingTop + n->paddingBottom;
 
     if (n->w == 0) n->w = totalW + n->paddingRight + n->paddingLeft;
     if (n->h == 0) n->h = maxH + n->paddingTop + n->paddingBottom;

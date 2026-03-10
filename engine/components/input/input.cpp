@@ -189,6 +189,7 @@ namespace Input {
       if (draggedScrollbarNode) {
         draggedScrollbarNode->scrollbarTimer = 1.5f;
         ScrollbarMetrics sb = draggedScrollbarNode->getScrollbarMetrics();
+
         if (sb.isVisible) {
           float localY = (my - dragOffsetY) - sb.trackY;
           float availableTrackSpace = sb.trackH - sb.thumbH;
@@ -296,7 +297,7 @@ namespace Input {
         while (curr) {
           ScrollbarMetrics sb = curr->getScrollbarMetrics();
 
-          if (sb.isVisible) {
+          if (sb.isVisible && curr->scrollbarOpacity > 0.0f) {
             if (mx >= sb.trackX && mx <= sb.trackX + sb.trackW &&
                 my >= sb.trackY && my <= sb.trackY + sb.trackH) {
 

@@ -207,6 +207,10 @@ const Character* Font::LoadGlyph(uint32_t c) {
   }
   FT_Face face = (FT_Face)ftFace;
 
+  if (c != '?' && FT_Get_Char_Index(face, c) == 0) {
+    return nullptr;
+  }
+
   if (styleFlags & FONT_STYLE_ITALIC) {
     FT_Matrix matrix;
     matrix.xx = 0x10000L;

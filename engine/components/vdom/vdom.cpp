@@ -113,6 +113,10 @@ namespace VDOM {
     }
     lua_pop(L, 1);
 
+    lua_getfield(L, idx, "key");
+    if (lua_isstring(L, -1)) n->key = lua_tostring(L, -1);
+    lua_pop(L, 1);
+
     lua_getfield(L, idx, "style");
     if (!lua_istable(L, -1)) {
       lua_pop(L, 1);
@@ -358,7 +362,7 @@ namespace VDOM {
     applyBoxModel("padding", "paddingTop", "paddingBottom", "paddingLeft", "paddingRight", n->padding, n->paddingTop, n->paddingBottom, n->paddingLeft, n->paddingRight);
     applyBoxModel("margin", "marginTop", "marginBottom", "marginLeft", "marginRight", n->margin, n->marginTop, n->marginBottom, n->marginLeft, n->marginRight);
 
-    std::string overflow = getStringProp(L, "overflow", "hidden");
+    std::string overflow = getStringProp(L, "overflow", "visible");
     bool newOverflowHidden = (overflow != "visible");
 
     if (n->overflowHidden != newOverflowHidden) {
@@ -456,11 +460,16 @@ namespace VDOM {
       if (lua_isstring(L, -1)) key = lua_tostring(L, -1);
       lua_pop(L, 1);
 
+      std::string newType = "";
+      lua_getfield(L, childIdx, "type");
+      if (lua_isstring(L, -1)) newType = lua_tostring(L, -1);
+      lua_pop(L, 1);
+
       // trying to find match by key
       Node* matchedNode = nullptr;
       if (!key.empty()) {
         for (size_t j = 0; j < current->children.size(); j++) {
-          if (!reused[j] && current->children[j]->key == key ) {
+          if (!reused[j] && current->children[j]->key == key && current->children[j]->type == newType) {
             matchedNode = current->children[j];
             reused[j] = true;
             break;
@@ -470,7 +479,7 @@ namespace VDOM {
 
       // try to find match by index
       if (!matchedNode) {
-        if (i < current->children.size() && !reused[i] && current->children[i]->key.empty()) {
+        if (i < current->children.size() && !reused[i] && current->children[i]->key.empty() && current->children[i]->type == newType) {
           matchedNode = current->children[i];
           reused[i] = true;
         }
