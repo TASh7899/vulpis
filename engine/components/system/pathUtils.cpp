@@ -1,4 +1,6 @@
 #include "pathUtils.h"
+#include <SDL2/SDL_filesystem.h>
+#include <SDL2/SDL_stdinc.h>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -12,6 +14,7 @@
 
 
 namespace Vulpis {
+
   namespace fs = std::filesystem;
 
   // retrives the absolute path to the directory containing the executable
@@ -46,32 +49,35 @@ namespace Vulpis {
 #endif
   }
 
-  // getAssetPath combines relative path with executable directory to get absolute path
-  std::string getAssetPath(const std::string& relativePath) {
-    static const fs::path exeDir = getExecutableDir();
 
-    std::vector<fs::path> candidates;
+  std::string getProjectRoot() {
+    char* basePathRaw = SDL_GetBasePath();
+    std::string basePath = basePathRaw ? basePathRaw : "./";
+    if (basePathRaw) SDL_free(basePathRaw);
 
-    // 1. Check ../assets/ (Development: build folder is usually one level deep)
-    candidates.push_back(exeDir.parent_path() / "assets" / relativePath);
-
-    // 2. Check ./assets/ (Release: assets next to exe)
-    candidates.push_back(exeDir / "assets" / relativePath);
-
-    // 3. Check direct path (User supplied "assets/..." manually)
-    candidates.push_back(exeDir / relativePath);
-    
-    // 4. Check ../ (Directly in root)
-    candidates.push_back(exeDir.parent_path() / relativePath);
-
-    for (const auto& path : candidates) {
-      if (fs::exists(path)) {
-        return path.string();
-      }
+    if (!basePath.empty() && (basePath.back() == '/' || basePath.back() == '\\')) {
+      basePath.pop_back();
     }
 
-    // Return the first candidate as default for error reporting
-    return candidates[0].string();
+    // Strip the 'debug' or 'release' folder
+    size_t slashPos = basePath.find_last_of("\\/");
+    if (slashPos != std::string::npos) {
+      basePath = basePath.substr(0, slashPos);
+    }
+
+    // Strip the 'build' folder 
+    slashPos = basePath.find_last_of("\\/");
+    if (slashPos != std::string::npos) {
+      basePath = basePath.substr(0, slashPos + 1); 
+    }
+
+    return basePath;
+  }
+
+  // getAssetPath combines relative path with executable directory to get absolute path
+  std::string getAssetPath(const std::string& relativePath) {
+    std::filesystem::path root(getProjectRoot());
+    return (root / "assets" / relativePath).string();
   }
 }
 

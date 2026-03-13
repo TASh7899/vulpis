@@ -207,7 +207,7 @@ void LoadFontConfig(lua_State* L) {
   AutoRegisterAllFonts();
 
   namespace fs = std::filesystem;
-  fs::path configPath = Vulpis::getExecutableDir().parent_path() / "config" / "VP_FONT_CONFIG.lua";
+  fs::path configPath = std::filesystem::path(Vulpis::getProjectRoot()) / "config" / "VP_FONT_CONFIG.lua";
 
   if (fs::exists(configPath)) {
     int top = lua_gettop(L);

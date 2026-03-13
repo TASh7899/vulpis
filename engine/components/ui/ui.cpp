@@ -18,6 +18,7 @@
 #include "../../configLogic/font/font_registry.h"
 #include "../../configLogic/engineConf/engine_config.h"
 #include "../../configLogic/font/font_registry.h"
+#include "../../configLogic/images/texture_registry.h"
 
 // global pointer for immediate mode
 RenderCommandList* activeCommandList = nullptr;
@@ -317,6 +318,15 @@ void NodeParseText(Node* n, lua_State* L) {
 
 }
 
+void NodeParseImage(Node* n, lua_State* L, int idx) {
+  lua_getfield(L, idx, "src");
+  if (lua_isstring(L, -1)) {
+    n->src = lua_tostring(L, -1);
+    n->textureId = TextureRegistry::GetTexture(n->src);
+  }
+  lua_pop(L, 1);
+}
+
 
 Node* buildNode(lua_State* L, int idx) {
   luaL_checktype(L, idx, LUA_TTABLE);
@@ -333,6 +343,10 @@ Node* buildNode(lua_State* L, int idx) {
     n->text = lua_tostring(L, -1);
   }
   lua_pop(L, 1);
+
+  if (n->type == "image") {
+    NodeParseImage(n, L, idx);
+  }
 
   lua_getfield(L, idx, "id");
   if (lua_isstring(L, -1)) n->id = lua_tostring(L, -1);
@@ -669,6 +683,15 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     list.push(PushClipCommand{{renderX, renderY, n->w, n->h}});
   }
 
+  if (n->type == "image" && n->textureId != 0) {
+    Color imageTint = {255, 255, 255, (uint8_t)(255 * alphaMultiplier)};
+    list.push(DrawImageCommand{
+        {renderX, renderY, n->w, n->h},
+        n->textureId,
+        imageTint
+        });
+  }
+
 
   if (n->type == "text" && !n->computedLines.empty()) {
     Font* font = n->font ? n->font : UI_GetFontById(n->fontId);
@@ -809,6 +832,11 @@ void generateRenderCommands(Node *n, RenderCommandList &list, float parentOffset
 
 void freeTree(lua_State* L, Node* n) {
   if (!n) return;
+
+  if (n->type == "image" && n->textureId != 0) {
+    TextureRegistry::ReleaseTexture(n->textureId);
+    n->textureId = 0;
+  }
 
   if (n->onClickRef != -2) {
     luaL_unref(L, LUA_REGISTRYINDEX, n->onClickRef);

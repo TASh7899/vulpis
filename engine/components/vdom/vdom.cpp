@@ -5,6 +5,7 @@
 #include <vector>
 #include "../text/font.h"
 #include "../../configLogic/font/font_registry.h"
+#include "../../configLogic/images/texture_registry.h"
 
 namespace VDOM {
 
@@ -302,6 +303,20 @@ namespace VDOM {
 
         if (n->textColor != newTextColor) {
           n->textColor = newTextColor;
+          paintChanged = true;
+        }
+      }
+      lua_pop(L, 1);
+    }
+
+    if (n->type == "image") {
+      lua_getfield(L, idx, "src");
+      if (lua_isstring(L, -1)) {
+        std::string newSrc = lua_tostring(L, -1);
+        if (n->src != newSrc) {
+          TextureRegistry::ReleaseTexture(n->textureId);
+          n->src = newSrc;
+          n->textureId = TextureRegistry::GetTexture(n->src);
           paintChanged = true;
         }
       }

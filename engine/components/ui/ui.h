@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <SDL2/SDL.h>
@@ -81,6 +82,9 @@ struct Node {
   std::string key;
   std::string id = "";
   std::vector<Node*> children;
+
+  std::string src;
+  uint32_t textureId = 0;
 
   std::string text;
   int fontId = 0;

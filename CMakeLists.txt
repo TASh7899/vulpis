@@ -46,6 +46,7 @@ add_executable(vulpis
   engine/components/system/pathUtils.cpp
   engine/configLogic/font/font_registry.cpp
   engine/configLogic/engineConf/engine_config.cpp
+  engine/configLogic/images/texture_registry.cpp
 )
 
 target_link_libraries(vulpis PRIVATE
@@ -66,23 +67,42 @@ target_include_directories(vulpis PRIVATE
   ${LUA_INCLUDE_DIR}
 )
 
+
+
+add_executable(asset_baker engine/tools/asset_baker.cpp)
+
 set(ASSETS_SOURCE "${CMAKE_SOURCE_DIR}/assets")
 set(ASSETS_DEST "${CMAKE_BINARY_DIR}/assets")
+
+set(BAKED_SOURCE "${CMAKE_SOURCE_DIR}/baked")
+set(BAKED_DEST "${CMAKE_BINARY_DIR}/baked")
+
 set(FONTS_SOURCE "${CMAKE_SOURCE_DIR}/third_party/NotoSans")
-set(FONTS_DEST "${CMAKE_BINARY_DIR}/builtin/NotoSans")
+set(FONTS_DEST "${ASSETS_DEST}/builtin/NotoSans")
+
+
+add_custom_target(BakeAssets ALL
+  COMMAND $<TARGET_FILE:asset_baker> "${ASSETS_SOURCE}" "${BAKED_SOURCE}"
+  DEPENDS asset_baker
+  COMMENT "Baking textures into .vtex binaries..."
+)
 
 if (WIN32)
   add_custom_target(SyncAssets ALL
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${ASSETS_SOURCE} ${ASSETS_DEST}
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${BAKED_SOURCE}" "${BAKED_DEST}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${FONTS_SOURCE} ${FONTS_DEST} # Copy Fonts
     COMMENT "Syncing assets and fonts..."
   )
 else()
   add_custom_target(SyncAssets ALL
     COMMAND ${CMAKE_COMMAND} -E create_symlink ${ASSETS_SOURCE} ${ASSETS_DEST}
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${BAKED_SOURCE}" "${BAKED_DEST}"
     COMMAND ${CMAKE_COMMAND} -E make_directory ${FONTS_DEST}
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${FONTS_SOURCE} ${FONTS_DEST}
     COMMENT "Ensuring assets symlink and fonts exist..."
   )
 endif()
+
+add_dependencies(SyncAssets BakeAssets)
 add_dependencies(vulpis SyncAssets)

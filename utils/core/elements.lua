@@ -205,4 +205,23 @@ function elements.Button(props)
 	return node
 end
 
+function elements.Image(props)
+	if type(props) == "string" then
+		props = { src = props }
+	end
+
+	local node = buildBaseNode(props, "image")
+	node.src = props.src or ""
+
+	-- Ensure images have a default size if not provided in style
+	if not node.style.w then
+		node.style.w = 100
+	end
+	if not node.style.h then
+		node.style.h = 100
+	end
+
+	return node
+end
+
 return elements

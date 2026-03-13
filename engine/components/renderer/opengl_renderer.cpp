@@ -118,6 +118,7 @@ void OpenGLRenderer::initBuffers() {
 }
 
 void OpenGLRenderer::beginFrame() {
+
   SDL_GetWindowSize(window, &winWidth, &winHeight);
   int drawableW, drawableH;
   SDL_GL_GetDrawableSize(window, &drawableW, &drawableH);
@@ -357,5 +358,29 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       }
 
     }
+
+    else if (std::holds_alternative<DrawImageCommand>(cmd)) {
+      const auto& data = std::get<DrawImageCommand>(cmd);
+
+      if (currentTextureID != data.textureId) {
+        flush();
+        currentTextureID = data.textureId;
+      }
+
+      float left   = snap(data.rect.x);
+      float top    = snap(data.rect.y);
+      float right  = snap(data.rect.x + data.rect.w);
+      float bottom = snap(data.rect.y + data.rect.h);
+
+      vertices.push_back({left, top, 0.0f, 0.0f, data.tint});
+      vertices.push_back({right, top, 1.0f, 0.0f, data.tint});
+      vertices.push_back({right, bottom, 1.0f, 1.0f, data.tint});
+
+      vertices.push_back({left, top, 0.0f, 0.0f, data.tint});
+      vertices.push_back({left, bottom, 0.0f, 1.0f, data.tint});
+      vertices.push_back({right, bottom, 1.0f, 1.0f, data.tint});
+
+    }
+
   }
 }

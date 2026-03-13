@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 import os
-from os.path import expanduser
-from re import S
 import sys
 import subprocess
 import platform
@@ -12,7 +10,6 @@ EXECUTABLE_NAME = "vulpis"
 
 def find_project_root():
     # Climb up from the current working directory to find the folder containing .vulpis
-
     current_dir = os.getcwd()
 
     while True:
@@ -40,7 +37,7 @@ def find_executable(build_dir):
 def init():
     # creates .vulpis file marker in directory
     if os.path.exists(MARKER_FILE):
-        print(f"Directory is already a Vulpis project ({MARKER_FILE} exists")
+        print(f"Directory is already a Vulpis project ({MARKER_FILE} exists)")
         return
     with open(MARKER_FILE, "w") as f:
         f.write("Vulpis Project Config\n")
@@ -56,32 +53,53 @@ def clean(root_dir):
     if os.path.exists(build_dir):
         try:
             shutil.rmtree(build_dir)
-            print("--- clean successfull ---")
+            print("--- clean successful ---")
         except Exception as e:
             print(f"--- Error Cleaning Build Directory: {e} ---")
-
     else:
         print("--- Directory already clean ---")
 
 
+import shutil
+
+def update_compile_db(root_dir, is_release):
+    build_folder = os.path.join("build", "release" if is_release else "debug")
+
+    source = os.path.join(root_dir, build_folder, "compile_commands.json")
+    target = os.path.join(root_dir, "compile_commands.json")
+
+    try:
+        if os.path.exists(target) or os.path.islink(target):
+            os.remove(target)
+
+        try:
+            os.symlink(source, target)
+        except OSError:
+            # fallback for Windows
+            shutil.copy(source, target)
+
+    except Exception as e:
+        print(f"Warning: Could not update compile_commands.json: {e}")
 
 
-def build(root_dir):
-    build_dir = os.path.join(root_dir, "build")
-    print(f"--- Building Vulpis Project in {os.getcwd()}")
+def build(root_dir, is_release=False):
+    system_os = platform.system()
+    
+    # 1. Select the correct preset prefix based on the OS
+    os_prefix = "linux"
+    if system_os == "Windows":
+        os_prefix = "windows"
+    elif system_os == "Darwin":
+        os_prefix = "mac"
+        
+    preset_name = f"{os_prefix}-{'release' if is_release else 'default'}"
+    build_folder = os.path.join("build", "release" if is_release else "debug")
+    build_dir = os.path.join(root_dir, build_folder)
+
+    print(f"--- Building Vulpis Project ({'Release' if is_release else 'Debug'}) in {os.getcwd()} ---")
 
     check_vcpkg(root_dir)
 
-    system_os = platform.system()
-    
-    # 1. Select the correct preset based on the OS
-    if system_os == "Windows":
-        preset_name = "windows-default"
-    elif system_os == "Darwin":
-        preset_name = "mac-default"
-    else:
-        preset_name = "linux-default"
-    
     print(f"--- Detected {system_os}, using preset: {preset_name} ---")
 
     # 2. AUTOMATION: Load MSVC Environment if on Windows and compiler is missing
@@ -96,8 +114,7 @@ def build(root_dir):
         found_vcvars = next((p for p in vcvars_paths if os.path.exists(p)), None)
         
         if found_vcvars:
-            # Note: We use the detected preset_name here as well
-            cmd = f'"{found_vcvars}" x64 && cmake --preset {preset_name} && cmake --build build'
+            cmd = f'"{found_vcvars}" x64 && cmake --preset {preset_name} && cmake --build {build_folder}'
             subprocess.run(cmd, shell=True, cwd=root_dir, check=True)
             return 
         else:
@@ -107,27 +124,37 @@ def build(root_dir):
     # 3. Standard Build Process (macOS, Linux, or Windows with compiler already in PATH)
     if not os.path.exists(build_dir):
         os.makedirs(build_dir)
+        
     try:
         subprocess.run(["cmake", "--preset", preset_name], cwd=root_dir, check=True)
-        subprocess.run(["cmake", "--build", "build"], cwd=root_dir, check=True)
+        # Point the build command explicitly to the subfolder (build/release or build/debug)
+
+        compile_db = os.path.join(root_dir, build_folder, "compile_commands.json")
+        if os.path.exists(compile_db):
+            update_compile_db(root_dir, is_release)
+
+        subprocess.run(["cmake", "--build", build_folder], cwd=root_dir, check=True)
     except subprocess.CalledProcessError:
         print("--- Build Failed ---")
         sys.exit(1)
 
-def run(root_dir):
-    build_dir = os.path.join(root_dir, "build")
+def run(root_dir, is_release=False):
+    # Route to the correct subfolder based on the flag
+    build_folder = os.path.join("build", "release" if is_release else "debug")
+    build_dir = os.path.join(root_dir, build_folder)
+
     executable = find_executable(build_dir)
 
     if not executable:
         print("Executable not found. Building first...")
-        build(root_dir)
+        build(root_dir, is_release)
         executable = find_executable(build_dir)
 
     if not executable:
         print("Critical Error: Build succeeded but executable was not found.")
         sys.exit(1)
 
-    print("--- Running vulpis ---")
+    print(f"--- Running vulpis ({'Release' if is_release else 'Debug'}) ---")
     try:
         subprocess.run([executable], cwd=build_dir)
     except KeyboardInterrupt:
@@ -137,17 +164,14 @@ def run(root_dir):
 def check_vcpkg(root_dir):
     vcpkg_dir = os.path.join(root_dir, "third_party", "vcpkg")
     is_windows = platform.system() == "Windows"
-    
-    # Define the bootstrap script name based on the OS
+
     bootstrap_script = "bootstrap-vcpkg.bat" if is_windows else "bootstrap-vcpkg.sh"
     bootstrap_path = os.path.join(vcpkg_dir, bootstrap_script)
 
-    # Check for the bootstrap script instead of .git to trigger submodule initialization
     if not os.path.exists(bootstrap_path):
         print("--- vcpkg files missing. Initializing vcpkg submodule ---")
         subprocess.run(["git", "submodule", "update", "--init", "--recursive"], cwd=root_dir, check=True)
 
-    # Check if the vcpkg executable exists
     exe_name = "vcpkg.exe" if is_windows else "vcpkg"
     vcpkg_exe = os.path.join(vcpkg_dir, exe_name)
 
@@ -156,22 +180,25 @@ def check_vcpkg(root_dir):
         if is_windows:
             subprocess.run([bootstrap_script], cwd=vcpkg_dir, shell=True, check=True)
         else:
-            # Grant executable permissions on Unix-like systems before running
             os.chmod(bootstrap_path, 0o755)
             subprocess.run([bootstrap_path], cwd=vcpkg_dir, shell=False, check=True)
-            
+
     print("--- vcpkg is ready ---")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: vulcli [init | build | run | vcpkg]")
+        print("Usage: vulcli [init | build | run | clean | vcpkg] [--release]")
         sys.exit(1)
 
     cmd = sys.argv[1]
+
+    # Check for the build option flag anywhere in the arguments
+    is_release = "--release" in sys.argv
+
     if cmd == "init":
         init()
-        sys.exit(1)
-    
+        sys.exit(0)
+
     project_root = find_project_root()
     if not project_root:
         print(" Error: Not inside a Vulpis project.")
@@ -180,15 +207,15 @@ if __name__ == "__main__":
         sys.exit(1)
 
     if cmd == "build":
-        build(project_root)
+        build(project_root, is_release)
     elif cmd == "run":
-        run(project_root)
+        run(project_root, is_release)
     elif cmd == "clean":
         clean(project_root)
     elif cmd == "vcpkg":
         check_vcpkg(project_root)
     else:
-        print(f"Unknow command: {cmd}")
+        print(f"Unknown command: {cmd}")
 
 
 

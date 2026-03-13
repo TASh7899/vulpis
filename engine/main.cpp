@@ -3,10 +3,13 @@
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL_video.h>
+#include <SDL2/SDL_filesystem.h>
 #include <SDL_stdinc.h>
 #include <SDL_timer.h>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <iterator>
 #include <ostream>
 #include <string>
 
@@ -20,6 +23,8 @@
 #include "components/vdom/vdom.h"
 #include "configLogic/font/font_registry.h"
 #include "./scripting/regsitry.h"
+#include "./configLogic/images/texture_registry.h"
+#include "./components/system/pathUtils.h"
 
 int protected_buildNode(lua_State* L) {
   Node* root = buildNode(L, 1);
@@ -60,6 +65,8 @@ int main(int argc, char* argv[]) {
   RegisterGlobalFunctions(L, "vulpis");
   AutoRegisterAllFonts();
 
+  std::string basePath = Vulpis::getProjectRoot();
+
   lua_getglobal(L, "package");
   lua_getfield(L, -1, "path");
   std::string paths = lua_tostring(L, -1);
@@ -67,23 +74,25 @@ int main(int argc, char* argv[]) {
 
 
   paths =
-    "../?.lua;"
-    "../?/init.lua;"
+    basePath + "?.lua;" +
+    basePath + "?/init.lua;" +
 
-    "../utils/?.lua;"
-    "../utils/?/init.lua;"
+    basePath + "utils/?.lua;" +
+    basePath + "utils/?/init.lua;" +
 
-    "../src/?.lua;"
-    "../src/?/init.lua;"
+    basePath + "src/?.lua;" +
+    basePath + "src/?/init.lua;" +
 
-    "../lua/?.lua;"
-    "../lua/?/init.lua;"
-    + paths;
+    basePath + "lua/?.lua;" +
+    basePath + "lua/?/init.lua;" +
+    paths;
+
   lua_pushstring(L, paths.c_str());
   lua_setfield(L, -2, "path");
   lua_pop(L, 1);
 
-  if (luaL_dofile(L, "../src/app.lua") != LUA_OK) {
+  std::string appPath = basePath + "src/app.lua";
+  if (luaL_dofile(L, appPath.c_str()) != LUA_OK) {
     std::cout << "Lua Error: " << lua_tostring(L, -1) << std::endl;
     lua_close(L);
     SDL_DestroyWindow(window);
@@ -194,8 +203,8 @@ int main(int argc, char* argv[]) {
   // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   OpenGLRenderer renderer(window);
 
-
   LoadFontConfig(L);
+
   // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
   // ╏ HANDLING APP FUNCTION ╏
   // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
@@ -255,7 +264,7 @@ int main(int argc, char* argv[]) {
   //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
   //          ╏                    MAIN PROGRAM LOOP                    ╏
   //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
-  
+
   Input::init();
 
   bool needsRedraw = true;
@@ -267,6 +276,11 @@ int main(int argc, char* argv[]) {
     Uint32 currentTime = SDL_GetTicks();
     float dt = (currentTime - lastTime) / 1000.0f;
     lastTime = currentTime;
+
+    if (TextureRegistry::ProcessUploads()) {
+      needsRedraw = true;
+      root->makeLayoutDirty();
+    }
 
     Input::updateState();
 
@@ -382,6 +396,7 @@ int main(int argc, char* argv[]) {
   }
 
   UI_ShutdownFonts();
+  TextureRegistry::Cleanup();
   freeTree(L, root);
   SDL_DestroyWindow(window);
   SDL_Quit();

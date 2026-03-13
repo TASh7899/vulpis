@@ -38,7 +38,13 @@ struct PopClipCommand {
 
 };
 
-using RenderCommand = std::variant<DrawRectCommand, PushClipCommand, PopClipCommand, DrawTextCommand>;
+struct DrawImageCommand {
+  Rect rect;
+  uint32_t textureId;
+  Color tint;
+};
+
+using RenderCommand = std::variant<DrawRectCommand, PushClipCommand, PopClipCommand, DrawTextCommand, DrawImageCommand>;
 
 struct RenderCommandList {
   std::vector<RenderCommand> commands;

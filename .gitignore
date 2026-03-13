@@ -5,6 +5,7 @@ obj/
 out/
 dist/
 Debug/
+baked/
 Release/
 assets/*
 config/*
