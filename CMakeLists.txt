@@ -67,8 +67,6 @@ target_include_directories(vulpis PRIVATE
   ${LUA_INCLUDE_DIR}
 )
 
-
-
 add_executable(asset_baker engine/tools/asset_baker.cpp)
 
 set(ASSETS_SOURCE "${CMAKE_SOURCE_DIR}/assets")
@@ -80,7 +78,6 @@ set(BAKED_DEST "${CMAKE_BINARY_DIR}/baked")
 set(FONTS_SOURCE "${CMAKE_SOURCE_DIR}/third_party/NotoSans")
 set(FONTS_DEST "${ASSETS_DEST}/builtin/NotoSans")
 
-
 add_custom_target(BakeAssets ALL
   COMMAND $<TARGET_FILE:asset_baker> "${ASSETS_SOURCE}" "${BAKED_SOURCE}"
   DEPENDS asset_baker
@@ -89,17 +86,19 @@ add_custom_target(BakeAssets ALL
 
 if (WIN32)
   add_custom_target(SyncAssets ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${ASSETS_SOURCE} ${ASSETS_DEST}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${BAKED_SOURCE}" # Safeguard if folder is deleted
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${ASSETS_SOURCE}" "${ASSETS_DEST}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${BAKED_SOURCE}" "${BAKED_DEST}"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${FONTS_SOURCE} ${FONTS_DEST} # Copy Fonts
-    COMMENT "Syncing assets and fonts..."
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${FONTS_SOURCE}" "${FONTS_DEST}"
+    COMMENT "Syncing assets, baked cache, and fonts..."
   )
 else()
   add_custom_target(SyncAssets ALL
-    COMMAND ${CMAKE_COMMAND} -E create_symlink ${ASSETS_SOURCE} ${ASSETS_DEST}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${BAKED_SOURCE}" # Safeguard if folder is deleted
+    COMMAND ${CMAKE_COMMAND} -E create_symlink "${ASSETS_SOURCE}" "${ASSETS_DEST}"
     COMMAND ${CMAKE_COMMAND} -E create_symlink "${BAKED_SOURCE}" "${BAKED_DEST}"
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${FONTS_DEST}
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${FONTS_SOURCE} ${FONTS_DEST}
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${FONTS_DEST}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${FONTS_SOURCE}" "${FONTS_DEST}"
     COMMENT "Ensuring assets symlink and fonts exist..."
   )
 endif()
