@@ -87,6 +87,7 @@ struct Node {
   uint32_t textureId = 0;
 
   std::string text;
+  std::string objectFit = "fill";
   int fontId = 0;
   Font* font = nullptr;
   Color textColor = {255, 255, 255, 255};

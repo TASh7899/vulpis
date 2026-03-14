@@ -372,13 +372,13 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       float right  = snap(data.rect.x + data.rect.w);
       float bottom = snap(data.rect.y + data.rect.h);
 
-      vertices.push_back({left, top, 0.0f, 0.0f, data.tint});
-      vertices.push_back({right, top, 1.0f, 0.0f, data.tint});
-      vertices.push_back({right, bottom, 1.0f, 1.0f, data.tint});
+      vertices.push_back({left, top, data.uMin, data.vMin, data.tint});
+      vertices.push_back({right, top, data.uMax, data.vMin, data.tint});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, data.tint});
 
-      vertices.push_back({left, top, 0.0f, 0.0f, data.tint});
-      vertices.push_back({left, bottom, 0.0f, 1.0f, data.tint});
-      vertices.push_back({right, bottom, 1.0f, 1.0f, data.tint});
+      vertices.push_back({left, top, data.uMin, data.vMin, data.tint});
+      vertices.push_back({left, bottom, data.uMin, data.vMax, data.tint});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, data.tint});
 
     }
 

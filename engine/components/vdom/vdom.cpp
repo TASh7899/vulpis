@@ -377,6 +377,13 @@ namespace VDOM {
     applyBoxModel("padding", "paddingTop", "paddingBottom", "paddingLeft", "paddingRight", n->padding, n->paddingTop, n->paddingBottom, n->paddingLeft, n->paddingRight);
     applyBoxModel("margin", "marginTop", "marginBottom", "marginLeft", "marginRight", n->margin, n->marginTop, n->marginBottom, n->marginLeft, n->marginRight);
 
+    std::string newFit = getStringProp(L, "fit", "fill");
+    if (n->objectFit != newFit) {
+      n->objectFit = newFit;
+      paintChanged = true;
+    }
+
+
     std::string overflow = getStringProp(L, "overflow", "visible");
     bool newOverflowHidden = (overflow != "visible");
 

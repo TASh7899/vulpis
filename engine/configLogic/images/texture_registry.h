@@ -7,6 +7,7 @@ namespace TextureRegistry {
     bool ProcessUploads();
     void Cleanup();
     void ReleaseTexture(GLuint textureID);
+    void GetTextureDimensions(GLuint textureID, int& w, int& h);
 }
 
 

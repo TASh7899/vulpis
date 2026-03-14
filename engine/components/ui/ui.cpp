@@ -434,7 +434,7 @@ Node* buildNode(lua_State* L, int idx) {
   n->alignItems = parseAlign(getString("alignItems", "start"));
   n->justifyContent = parseJustify(getString("justifyContent", "start"));
   n->textAlign = parseTextAlign(getString("textAlign", "left"));
-
+  n->objectFit = getString("fit", "fill");
   std::string pos = getString("position", "relative");
   if (pos == "absolute") {
     n->position = PositionType::Absolute;
@@ -685,10 +685,48 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
   if (n->type == "image" && n->textureId != 0) {
     Color imageTint = {255, 255, 255, (uint8_t)(255 * alphaMultiplier)};
+
+    float uMin = 0.0f, vMin = 0.0f, uMax = 1.0f, vMax = 1.0f;
+    float drawX = renderX, drawY = renderY, drawW = n->w, drawH = n->h;
+
+    int texW = 0, texH = 0;
+    TextureRegistry::GetTextureDimensions(n->textureId, texW, texH);
+
+    if (texW > 0 && texH > 0) {
+      float imgAspect = (float)texW / (float)texH;
+      float boxAspect = n->w / n->h;
+
+      if (n->objectFit == "cover") {
+        if (imgAspect > boxAspect) {
+          float scaledW = n->h * imgAspect;
+          float crop = (scaledW - n->w) / 2.0f;
+          uMin = crop / scaledW;
+          uMax = 1.0f - uMin;
+        } else {
+          float scaledH = n->w / imgAspect;
+          float crop = (scaledH - n->h) / 2.0f;
+          vMin = crop / scaledH;
+          vMax = 1.0f - vMin;
+        }
+      } else if (n->objectFit == "contain") {
+        if (imgAspect > boxAspect) {
+          drawW = n->w;
+          drawH = n->w / imgAspect;
+          drawY += (n->h - drawH) / 2.0f;
+        } else {
+          drawH = n->h;
+          drawW = n->h * imgAspect;
+          drawX += (n->w - drawW) / 2.0f; 
+        }
+      }
+    }
+
+
     list.push(DrawImageCommand{
-        {renderX, renderY, n->w, n->h},
+        {drawX, drawY, drawW, drawH},
         n->textureId,
-        imageTint
+        imageTint,
+        uMin, vMin, uMax, vMax
         });
   }
 

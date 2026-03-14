@@ -42,6 +42,10 @@ struct DrawImageCommand {
   Rect rect;
   uint32_t textureId;
   Color tint;
+  float uMin = 0.0f;
+  float vMin = 0.0f;
+  float uMax = 1.0f;
+  float vMax = 1.0f;
 };
 
 using RenderCommand = std::variant<DrawRectCommand, PushClipCommand, PopClipCommand, DrawTextCommand, DrawImageCommand>;
