@@ -200,6 +200,10 @@ struct Node {
   SDL_Color color = {0,0,0,0};
   bool hasBackground = false;
 
+  std::string bgImageSrc = "";
+  uint32_t bgTextureId = 0;
+  std::string bgImageFit = "cover";
+
   Node* parent = nullptr;
   bool isLayoutDirty = true;
   bool isPaintDirty = true;

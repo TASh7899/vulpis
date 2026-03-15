@@ -384,6 +384,8 @@ namespace VDOM {
     }
 
 
+
+
     std::string overflow = getStringProp(L, "overflow", "visible");
     bool newOverflowHidden = (overflow != "visible");
 
@@ -419,6 +421,31 @@ namespace VDOM {
       }
     }
     lua_pop(L, 1);
+
+
+    lua_getfield(L, -1, "BGImage");
+    if (lua_isstring(L, -1)) {
+      std::string newSrc = lua_tostring(L, -1);
+      if (n->bgImageSrc != newSrc) {
+        if (n->bgTextureId != 0) TextureRegistry::ReleaseTexture(n->bgTextureId);
+        n->bgImageSrc = newSrc;
+        n->bgTextureId = TextureRegistry::GetTexture(n->bgImageSrc);
+        paintChanged = true;
+      }
+    } else if (lua_isnil(L, -1) && n->bgTextureId != 0) {
+      // If the user dynamically removes the BGImage in Lua
+      TextureRegistry::ReleaseTexture(n->bgTextureId);
+      n->bgTextureId = 0;
+      n->bgImageSrc = "";
+      paintChanged = true;
+    }
+    lua_pop(L, 1);
+
+    std::string newBgFit = getStringProp(L, "BGFit", "cover");
+    if (n->bgImageFit != newBgFit) {
+      n->bgImageFit = newBgFit;
+      paintChanged = true;
+    }
 
     if (layoutChanged) {
       n->makeLayoutDirty();

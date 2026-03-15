@@ -478,6 +478,17 @@ Node* buildNode(lua_State* L, int idx) {
       n->hasBackground = true;
     }
     lua_pop(L, 1);
+
+    lua_getfield(L, -1, "BGImage");
+    if (lua_isstring(L, -1)) {
+      n->bgImageSrc = lua_tostring(L, -1);
+      n->bgTextureId = TextureRegistry::GetTexture(n->bgImageSrc);
+    }
+    lua_pop(L, 1);
+
+    n->bgImageFit = getString("BGFit", "cover");
+
+
   }
 
   lua_pop(L, 1);
@@ -668,6 +679,50 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     list.push(DrawRectCommand{
         {renderX, renderY, n->w, n->h},
         {n->color.r, n->color.g, n->color.b, (uint8_t)(n->color.a * alphaMultiplier)}
+        });
+  }
+
+  if (n->bgTextureId != 0) {
+    float uMin = 0.0f, vMin = 0.0f, uMax = 1.0f, vMax = 1.0f;
+    float drawX = renderX, drawY = renderY, drawW = n->w, drawH = n->h;
+
+    int texW = 0, texH = 0;
+    TextureRegistry::GetTextureDimensions(n->bgTextureId, texW, texH);
+
+    if (texW > 0 && texH > 0) {
+      float imgAspect = (float)texW / (float)texH;
+      float boxAspect = n->w / n->h;
+
+      if (n->bgImageFit == "cover") {
+        if (imgAspect > boxAspect) {
+          float scaledW = n->h * imgAspect;
+          float crop = (scaledW - n->w) / 2.0f;
+          uMin = crop / scaledW;
+          uMax = 1.0f - uMin;
+        } else {
+          float scaledH = n->w / imgAspect;
+          float crop = (scaledH - n->h) / 2.0f;
+          vMin = crop / scaledH;
+          vMax = 1.0f - vMin;
+        }
+      } else if (n->bgImageFit == "contain") {
+        if (imgAspect > boxAspect) {
+          drawW = n->w;
+          drawH = n->w / imgAspect;
+          drawY += (n->h - drawH) / 2.0f;
+        } else {
+          drawH = n->h;
+          drawW = n->h * imgAspect;
+          drawX += (n->w - drawW) / 2.0f; 
+        }
+      }
+    }
+
+    list.push(DrawImageCommand{
+        {drawX, drawY, drawW, drawH},
+        n->bgTextureId,
+        {255, 255, 255, (uint8_t)(255 * alphaMultiplier)},
+        uMin, vMin, uMax, vMax
         });
   }
 
@@ -874,6 +929,11 @@ void freeTree(lua_State* L, Node* n) {
   if (n->type == "image" && n->textureId != 0) {
     TextureRegistry::ReleaseTexture(n->textureId);
     n->textureId = 0;
+  }
+
+  if (n->bgTextureId != 0) {
+    TextureRegistry::ReleaseTexture(n->bgTextureId);
+    n->bgTextureId = 0;
   }
 
   if (n->onClickRef != -2) {
@@ -1132,7 +1192,7 @@ void DamageRect::add(float nx, float ny, float nw, float nh) {
 
   // expand the region a little bit for better result
   nx -= 2.0f; ny -= 2.0f; nw += 4.0f; nh += 4.0f;
-  
+
   if (!active) {
     x = nx; y = ny; w = nw; h = nh;
     active = true;
@@ -1159,5 +1219,5 @@ void DamageRect::update() {
     active = false;
     fullScreen = false;
   }
-  
+
 }
