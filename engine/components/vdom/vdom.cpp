@@ -323,7 +323,12 @@ namespace VDOM {
       lua_pop(L, 1);
     }
 
-    update(n->opacity, getFloatProp(L, "opacity", 1.0f), paintChanged);
+    float newOpacity = getFloatProp(L, "opacity", 1.0f);
+    if (n->opacity != newOpacity) {
+      n->opacity = newOpacity;
+      n->invalidateSubtreePaint();
+      paintChanged = true;
+    }
 
     // comparing % w and h 
     update(n->widthStyle, getLength(L, "w"), layoutChanged);

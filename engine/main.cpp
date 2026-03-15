@@ -371,10 +371,10 @@ int main(int argc, char* argv[]) {
         solver->solve(root, {winW, winH});
         updateTextLayout(root);
         root->isLayoutDirty = false;
+        root->invalidateSubtreePaint();
         g_damageTracker.damageAll();
       }
 
-      root->isPaintDirty = false;
       renderer.beginFrame(g_damageTracker);
       RenderCommandList cmdList;
       generateRenderCommands(root, cmdList);

@@ -652,15 +652,19 @@ void layout(Node* n, int x, int y) {
 static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX,
     float parentOffsetY, bool isDragPass, bool isInsideDraggedNode, float parentAlpha) {
 
-  bool treatAsDragged = isInsideDraggedNode || n->isDragging;
-
-  // In the drag pass, skip nodes that aren't dragged (but search their children to find the dragged one)
-  if (isDragPass && !treatAsDragged) {
-    for (Node* c : n->children) {
-      renderNodePass(c, list, parentOffsetX, parentOffsetY, isDragPass, false, parentAlpha);
+  // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  // ╏ IF CLEAN, DUMP CACHE AND RETURN INSTANTLY ╏
+  // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  if (!isDragPass && !n->isPaintDirty && n->hasCachedCommands) {
+    for (const auto& cmd : n->cachedCommands.commands) {
+      list.push(cmd);
     }
-    return; // Skip rendering the normal UI in the drag pass
+    return;
   }
+
+  size_t startIndex = list.commands.size();
+
+  bool treatAsDragged = isInsideDraggedNode || n->isDragging;
 
   // Accumulate offsets
   float totalOffsetX = parentOffsetX;
@@ -917,6 +921,19 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   if (applyClip) {
     list.push(PopClipCommand{});
   }
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ CAPTURE GENERATED COMMANDS TO RAM ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  if (!isDragPass) {
+    n->cachedCommands.commands.clear();
+    for (size_t i = startIndex; i < list.commands.size(); i++) {
+      n->cachedCommands.commands.push_back(list.commands[i]);
+    }
+    n->hasCachedCommands = true;
+    n->isPaintDirty = false;
+  }
+
 }
 
 void generateRenderCommands(Node *n, RenderCommandList &list, float parentOffsetX, float parentOffsetY) {

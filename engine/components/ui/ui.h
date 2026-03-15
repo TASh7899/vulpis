@@ -212,6 +212,7 @@ struct Node {
 
   void makeLayoutDirty() {
     isLayoutDirty = true;
+    makePaintDirty();
     if (parent) {
       parent->makeLayoutDirty();
     }
@@ -225,10 +226,21 @@ struct Node {
     }
   }
 
-
-
-
   PositionType position = PositionType::Relative;
+
+  // Cache Storage
+  RenderCommandList cachedCommands;
+  bool hasCachedCommands = false;
+
+  // subtree invalidator
+  void invalidateSubtreePaint() {
+    isPaintDirty = true;
+    hasCachedCommands = false;
+    for (Node* c : children) {
+      c->invalidateSubtreePaint();
+    }
+  }
+
 };
 
 
