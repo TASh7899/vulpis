@@ -2,6 +2,7 @@
 #include <glad/glad.h>
 #include "commands.h"
 #include "renderer.h"
+#include "../ui/ui.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <vector>
@@ -17,7 +18,7 @@ class OpenGLRenderer : public Renderer {
     OpenGLRenderer(SDL_Window* window);
     ~OpenGLRenderer();
 
-    void beginFrame() override;
+    void beginFrame(const DamageRect& damage) override;
     void endFrame() override;
     void submit(const RenderCommandList& commandList) override;
 

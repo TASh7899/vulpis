@@ -77,6 +77,19 @@ struct ScrollbarMetrics {
   float maxScrollY;
 };
 
+struct DamageRect {
+  bool active = true;
+  bool fullScreen = true;
+  float x = 0, y = 0, w = 0, h = 0;
+  int framesLeft = 2;
+
+  void add(float nx, float ny, float nw, float nh);
+  void damageAll();
+  void update();
+};
+
+extern DamageRect g_damageTracker;
+
 struct Node {
   std::string type;
   std::string key;
@@ -144,8 +157,8 @@ struct Node {
   int onKeyDownRef = -2;
   int onFocusRef = -2;
   int onBlurRef = -2;
-  
-  
+
+
   // Cursor state for rendering
   int cursorPosition = -1; // -1 means no cursor/unfocused
   int selectionStart = -1;
@@ -200,9 +213,10 @@ struct Node {
   }
 
   void makePaintDirty() {
-    isLayoutDirty = true;
+    g_damageTracker.add(this->x, this->y, this->w, this->h);
+    isPaintDirty = true;
     if (parent) {
-      parent->makeLayoutDirty();
+      parent->makePaintDirty();
     }
   }
 

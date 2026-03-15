@@ -138,6 +138,7 @@ namespace Input {
 
     if (shouldBeHovered && !node->isHovered) {
       node->isHovered = true;
+      node->makePaintDirty();
       if (node->onMouseEnterRef != -2) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, node->onMouseEnterRef);
         if (lua_isfunction(L, -1)) {
@@ -151,6 +152,7 @@ namespace Input {
       }
     } else if (!shouldBeHovered && node->isHovered) {
       node->isHovered = false;
+      node->makePaintDirty();
       if (node->onMouseLeaveRef != -2) {
         lua_rawgeti(L, LUA_REGISTRYINDEX, node->onMouseLeaveRef);
         if (lua_isfunction(L, -1)) {

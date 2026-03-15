@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
@@ -117,13 +118,31 @@ void OpenGLRenderer::initBuffers() {
   glBindVertexArray(0);
 }
 
-void OpenGLRenderer::beginFrame() {
+void OpenGLRenderer::beginFrame(const DamageRect& damage) {
 
   SDL_GetWindowSize(window, &winWidth, &winHeight);
   int drawableW, drawableH;
   SDL_GL_GetDrawableSize(window, &drawableW, &drawableH);
   glViewport(0, 0, drawableW, drawableH);
 
+  float dpiScale = (float)drawableW / (float)winWidth;
+
+  if (damage.active && !damage.fullScreen) {
+    glEnable(GL_SCISSOR_TEST);
+    int sx = (int)std::floor(damage.x * dpiScale);
+    int sw = (int)std::floor(damage.w * dpiScale);
+    int sh = (int)std::floor(damage.h * dpiScale);
+    int sy = drawableH - (int)std::floor(damage.h * dpiScale) - sh;
+
+    sx = std::max(0, sx);
+    sy = std::max(0, sy);
+    sw = std::min(drawableW - sx, sw);
+    sh = std::min(drawableH - sy, sh);
+
+    glScissor(sx, sy, sw, sh);
+  } else {
+    glDisable(GL_SCISSOR_TEST);
+  }
   
   glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
@@ -149,6 +168,7 @@ void OpenGLRenderer::beginFrame() {
 }
 
 void OpenGLRenderer::endFrame() {
+  glDisable(GL_SCISSOR_TEST);
   flush();
   SDL_GL_SwapWindow(window);
 }

@@ -296,6 +296,7 @@ int main(int argc, char* argv[]) {
         if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
           winW = event.window.data1;
           winH = event.window.data2;
+          g_damageTracker.damageAll();
           root->makeLayoutDirty();
         }
       } while (SDL_PollEvent(&event));
@@ -354,21 +355,27 @@ int main(int argc, char* argv[]) {
       StateManager::instance().clearDirty();
     }
 
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ CURSOR BLINKING ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
     if (currentTime - lastCursorToggle >= 500) {
       needsRedraw = true;
       lastCursorToggle = currentTime;
+      Node* focused = Input::findFocusedNode(root);
+      if (focused) {
+        focused->makePaintDirty();
+      }
     }
-
     if (needsRedraw) {
       if (root->isLayoutDirty) {
         solver->solve(root, {winW, winH});
         updateTextLayout(root);
         root->isLayoutDirty = false;
+        g_damageTracker.damageAll();
       }
 
       root->isPaintDirty = false;
-
-      renderer.beginFrame();
+      renderer.beginFrame(g_damageTracker);
       RenderCommandList cmdList;
       generateRenderCommands(root, cmdList);
       UI_SetRenderCommandList(&cmdList);
@@ -391,7 +398,11 @@ int main(int argc, char* argv[]) {
       renderer.submit(cmdList);
       renderer.endFrame();
 
-      needsRedraw = false;
+      g_damageTracker.update();
+
+      if (!g_damageTracker.active) {
+        needsRedraw = false;
+      }
     }
   }
 

@@ -10,5 +10,6 @@ namespace Input {
 
   void init();
   void updateState();
+  Node* findFocusedNode(Node* root);
 
 }

@@ -1125,6 +1125,39 @@ ScrollbarMetrics Node::getScrollbarMetrics() {
 }
 
 
+DamageRect g_damageTracker;
 
+void DamageRect::add(float nx, float ny, float nw, float nh) {
+  if (fullScreen) return;
 
+  // expand the region a little bit for better result
+  nx -= 2.0f; ny -= 2.0f; nw += 4.0f; nh += 4.0f;
+  
+  if (!active) {
+    x = nx; y = ny; w = nw; h = nh;
+    active = true;
+  } else {
+    float right = std::max(x + w, nx + nw);
+    float bottom = std::max(y + h, ny + nh);
+    x = std::min(x, nx);
+    y = std::min(y, ny);
+    w = right - x;
+    h = bottom - y;
+  }
+  framesLeft = 2;
+}
 
+void DamageRect::damageAll() {
+  fullScreen = true;
+  active = true;
+  framesLeft = 2;
+}
+
+void DamageRect::update() {
+  if (framesLeft > 0) framesLeft--;
+  if (framesLeft == 0) {
+    active = false;
+    fullScreen = false;
+  }
+  
+}
