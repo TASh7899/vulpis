@@ -166,6 +166,7 @@ struct Node {
 
 
   int spacing = 0;
+  float opacity = 1.0f;
   int margin = 0;
   int marginTop = 0, marginBottom = 0, marginLeft = 0, marginRight = 0;
   int padding = 0;

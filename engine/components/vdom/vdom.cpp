@@ -323,6 +323,8 @@ namespace VDOM {
       lua_pop(L, 1);
     }
 
+    update(n->opacity, getFloatProp(L, "opacity", 1.0f), paintChanged);
+
     // comparing % w and h 
     update(n->widthStyle, getLength(L, "w"), layoutChanged);
     update(n->heightStyle, getLength(L, "h"), layoutChanged);

@@ -406,6 +406,9 @@ Node* buildNode(lua_State* L, int idx) {
     checkFloat("top", n->hasTop, n->topVal);
     checkFloat("right", n->hasRight, n->rightVal);
     checkFloat("bottom", n->hasBottom, n->bottomVal);
+    
+    n->opacity = getFloat("opacity", 1.0f);
+
   }
 
   n->spacing = getInt("gap", getInt("spacing", 0));
@@ -647,14 +650,14 @@ void layout(Node* n, int x, int y) {
 }
 
 static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX,
-    float parentOffsetY, bool isDragPass, bool isInsideDraggedNode) {
+    float parentOffsetY, bool isDragPass, bool isInsideDraggedNode, float parentAlpha) {
 
   bool treatAsDragged = isInsideDraggedNode || n->isDragging;
 
   // In the drag pass, skip nodes that aren't dragged (but search their children to find the dragged one)
   if (isDragPass && !treatAsDragged) {
     for (Node* c : n->children) {
-      renderNodePass(c, list, parentOffsetX, parentOffsetY, isDragPass, false);
+      renderNodePass(c, list, parentOffsetX, parentOffsetY, isDragPass, false, parentAlpha);
     }
     return; // Skip rendering the normal UI in the drag pass
   }
@@ -672,7 +675,8 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   float renderY = n->y + totalOffsetY;
 
   // Make the dragged ghost slightly transparent (70% opacity)
-  float alphaMultiplier = (isDragPass && treatAsDragged) ? 0.7f : 1.0f;
+  float currentAlpha = parentAlpha * n->opacity;
+  float alphaMultiplier = (isDragPass && treatAsDragged) ? (currentAlpha * 0.7f) : currentAlpha;
 
 
   if (n->hasBackground) {
@@ -889,7 +893,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
   // Render children
   for (Node* c : n->children) {
-    renderNodePass(c, list, totalOffsetX, totalOffsetY, isDragPass, treatAsDragged);
+    renderNodePass(c, list, totalOffsetX, totalOffsetY, isDragPass, treatAsDragged, parentAlpha);
   }
 
   // Render Scrollbars
@@ -917,10 +921,10 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
 void generateRenderCommands(Node *n, RenderCommandList &list, float parentOffsetX, float parentOffsetY) {
   // PASS 1: Draw the base UI layer normally
-  renderNodePass(n, list, parentOffsetX, parentOffsetY, false, false);
+  renderNodePass(n, list, parentOffsetX, parentOffsetY, false, false, 1.0f);
 
   // PASS 2: Draw the dragged elements on top of everything!
-  renderNodePass(n, list, parentOffsetX, parentOffsetY, true, false);
+  renderNodePass(n, list, parentOffsetX, parentOffsetY, true, false, 1.0f);
 }
 
 void freeTree(lua_State* L, Node* n) {
