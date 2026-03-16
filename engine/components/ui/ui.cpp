@@ -19,6 +19,7 @@
 #include "../../configLogic/engineConf/engine_config.h"
 #include "../../configLogic/font/font_registry.h"
 #include "../../configLogic/images/texture_registry.h"
+#include "../input/input.h"
 
 // global pointer for immediate mode
 RenderCommandList* activeCommandList = nullptr;
@@ -662,9 +663,17 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     return;
   }
 
-  size_t startIndex = list.commands.size();
 
   bool treatAsDragged = isInsideDraggedNode || n->isDragging;
+
+  if (isDragPass && !treatAsDragged) {
+    for (Node* c : n->children) {
+      renderNodePass(c, list, parentOffsetX, parentOffsetY, isDragPass, false, parentAlpha);
+    }
+    return;
+  }
+
+  size_t startIndex = list.commands.size();
 
   // Accumulate offsets
   float totalOffsetX = parentOffsetX;
@@ -794,46 +803,50 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   }
 
 
-  if (n->type == "text" && !n->computedLines.empty()) {
+  if (n->type == "text") {
     Font* font = n->font ? n->font : UI_GetFontById(n->fontId);
     if (font) {
       n->font = font;
       float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
-      float cursorOffsetX = 0;
 
+      std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
+      float totalTextWidth = 0;
+      for (uint32_t cp : codepoints) {
+        totalTextWidth += font->GetLogicalAdvance(cp);
+      }
+
+      float xOffset = 0;
+      if (!n->wordWrap) {
+        if (n->textAlign == TextAlign::Center) xOffset = (contentWidth - totalTextWidth) / 2.0f;
+        else if (n->textAlign == TextAlign::Right) xOffset = contentWidth - totalTextWidth;
+      }
+
+      float cursorOffsetX = 0;
       if (n->cursorPosition >= 0) {
-        std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
         for (int i = 0; i < std::min((int)codepoints.size(), n->cursorPosition); i++) {
           cursorOffsetX += font->GetLogicalAdvance(codepoints[i]);
         }
 
-        // autp scrolling logic, scrolling when content width is bigger
-        if (cursorOffsetX - n->scrollX > contentWidth) {
-          //if current content with scroll is bigger than contentWidth then 
-          //scroll the amount of overflow plus 1 for padding
-          n->scrollX = cursorOffsetX - contentWidth + 1.0f;
-        } else if (cursorOffsetX < n->scrollX) {
-          // cursor is outside in left area make it inside the box
-          n->scrollX = cursorOffsetX;
+        float actualCursorX = cursorOffsetX + xOffset;
+        if (actualCursorX - n->scrollX > contentWidth) {
+          n->scrollX = actualCursorX - contentWidth + 1.0f;
+        } else if (actualCursorX < n->scrollX) {
+          n->scrollX = actualCursorX;
         }
         if (n->scrollX < 0) n->scrollX = 0;
       }
+
 
       // apply the scrolling to start coordiantes
       float startX = renderX + n->paddingLeft - n->scrollX;
       float cursorY = renderY + n->paddingTop + n->font->GetLogicalAscent();
 
       if (n->selectionStart >= 0 && n->selectionEnd >= 0 && n->selectionStart != n->selectionEnd) {
-        int selMin = std::min(n->selectionStart, n->selectionEnd);
-        int selMax = std::max(n->selectionStart, n->selectionEnd);
-
-        std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
-        selMin = std::max(0, std::min(selMin, (int)codepoints.size()));
-        selMax = std::max(0, std::min(selMax, (int)codepoints.size()));
+        int selMin = std::max(0, std::min({n->selectionStart, n->selectionEnd, (int)codepoints.size()}));
+        int selMax = std::max(0, std::min({std::max(n->selectionStart, n->selectionEnd), (int)codepoints.size()}));
 
         float selStartX = 0;
         float selWidth = 0;
-
         for (int i = 0; i < selMax; i++) {
           float adv = font->GetLogicalAdvance(codepoints[i]);
           if (i < selMin) {
@@ -851,15 +864,8 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
       }
 
       if (n->cursorPosition >= 0) {
-        float cursorOffsetX = 0;
-        int currentIdx = 0;
-
-        std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
-        for (int i = 0; i < std::min((int)codepoints.size(), n->cursorPosition); i++) {
-          cursorOffsetX += font->GetLogicalAdvance(codepoints[i]);
-        }
-
-        if ((SDL_GetTicks() / 500) % 2 == 0) {
+        bool showCursor = ((SDL_GetTicks() - Input::lastInputTime) % 1000) < 500;
+        if (showCursor) {
           list.push(DrawRectCommand{
               {startX + cursorOffsetX, renderY + n->paddingTop, 1.0f, n->computedLineHeight},
               {n->textColor.r, n->textColor.g, n->textColor.b, 255}
@@ -868,26 +874,21 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
       }
 
       for (const std::string& line : n->computedLines) {
-        float lineWidth = 0;
-        for (char c : line) {
-          lineWidth += n->font->GetLogicalAdvance(c);
-        }
-        float xOffset = 0;
-        if (n->textAlign == TextAlign::Center)  {
-          xOffset = (contentWidth - lineWidth) / 2.0f;
-        } else if (n->textAlign == TextAlign::Right) {
-          xOffset = contentWidth - lineWidth;
+        float lineXOffset = xOffset;
+
+        if (n->wordWrap) {
+          float lineWidth = 0;
+          for (char c : line) lineWidth += n->font->GetLogicalAdvance(c);
+          if (n->textAlign == TextAlign::Center)  lineXOffset = (contentWidth - lineWidth) / 2.0f;
+          else if (n->textAlign == TextAlign::Right) lineXOffset = contentWidth - lineWidth;
         }
 
-        // FIXED: Using Color instead of SDL_Color
         Color renderTextColor = {
-          n->textColor.r, 
-          n->textColor.g, 
-          n->textColor.b, 
+          n->textColor.r, n->textColor.g, n->textColor.b,
           (uint8_t)(n->textColor.a * alphaMultiplier)
         };
 
-        list.push(DrawTextCommand{line, n->font, startX + xOffset, cursorY, renderTextColor, n->textDecoration});
+        list.push(DrawTextCommand{line, n->font, startX + lineXOffset, cursorY, renderTextColor, n->textDecoration});
         cursorY += n->computedLineHeight;
       }
     }
@@ -922,9 +923,9 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     list.push(PopClipCommand{});
   }
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ CAPTURE GENERATED COMMANDS TO RAM ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  // ╏ CAPTURE GENERATED COMMANDS TO RAM ╏
+  // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   if (!isDragPass) {
     n->cachedCommands.commands.clear();
     for (size_t i = startIndex; i < list.commands.size(); i++) {
@@ -946,6 +947,8 @@ void generateRenderCommands(Node *n, RenderCommandList &list, float parentOffset
 
 void freeTree(lua_State* L, Node* n) {
   if (!n) return;
+
+  Input::clearNodeState(n);
 
   if (n->type == "image" && n->textureId != 0) {
     TextureRegistry::ReleaseTexture(n->textureId);
@@ -1107,16 +1110,23 @@ void computeTextLayout(Node* n) {
   Font* font = n->font ? n->font : UI_GetFontById(n->fontId);
   n->font = font;
 
-  if (n->type != "text" || !n->font || n->text.empty()) {
+  if (n->type != "text" || !n->font) {
     n->computedLines.clear();
     return;
   }
+
+  n->computedLineHeight = (float)n->font->GetLogicalLineHeight();
+
+  if (n->text.empty()) {
+    n->computedLines.clear();
+    return;
+  }
+
 
   float maxWidth = n->wordWrap ? (n->w - (n->paddingLeft + n->paddingRight)) : std::numeric_limits<float>::max();;
   TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
 
   n->computedLines = res.lines;
-  n->computedLineHeight = (float)n->font->GetLogicalLineHeight();
 }
 
 void updateTextLayout(Node* root) {

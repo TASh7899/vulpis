@@ -31,13 +31,17 @@ function TextInput(props)
 		setState(id .. "_anchor", #internalText)
 	end
 
-	local currentText = isControlled and props.value or internalText
+	if isControlled and internalText ~= props.value then
+		internalText = props.value
+		setState(id .. "_text", internalText)
+	end
+
+	local currentText = internalText
 	local isFocused = useState(id .. "_focus", false)
 
 	local savedCursor = useState(id .. "_cursor", #currentText)
 	local curPos = math.min(savedCursor, #currentText)
 
-	-- Track the "Anchor" (where the user first held Shift)
 	local savedAnchor = useState(id .. "_anchor", curPos)
 	local selAnchor = math.min(savedAnchor, #currentText)
 
@@ -45,13 +49,12 @@ function TextInput(props)
 	local isEmpty = currentText == ""
 	local displayText = isEmpty and (props.placeholder or " ") or currentText
 
-	-- Helper to get sorted selection range
-	local function getSelection()
-		if curPos ~= selAnchor then
-			return math.min(curPos, selAnchor), math.max(curPos, selAnchor)
-		end
-		return nil, nil
-	end
+	-- [!] FIX: A mutable reference that persists across multiple rapid-fire events in a single frame.
+	local live = {
+		text = currentText,
+		cursor = curPos,
+		anchor = selAnchor,
+	}
 
 	return {
 		type = "text",
@@ -59,7 +62,6 @@ function TextInput(props)
 		focusable = true,
 		isFocused = isFocused,
 
-		-- Send exact cursor and selection indices to C++
 		cursorPosition = isFocused and (isEmpty and 0 or curPos) or -1,
 		selectionStart = isFocused and (isEmpty and 0 or selAnchor) or -1,
 		selectionEnd = isFocused and (isEmpty and 0 or curPos) or -1,
@@ -83,93 +85,110 @@ function TextInput(props)
 
 		onDragStart = function(mx, my, textIdx, clicks)
 			if textIdx >= 0 then
+				local isE = live.text == ""
 				if clicks and clicks >= 2 then
-					setState(id .. "_anchor", 0)
-					setState(id .. "_cursor", #currentText)
-					setState(id .. "_focus", true)
+					live.anchor = 0
+					live.cursor = #live.text
 				else
-					local targetIdx = isEmpty and 0 or math.min(textIdx, #currentText)
-					setState(id .. "_cursor", targetIdx)
-					setState(id .. "_anchor", targetIdx)
-					setState(id .. "_focus", true)
+					local targetIdx = isE and 0 or math.min(textIdx, #live.text)
+					live.cursor = targetIdx
+					live.anchor = targetIdx
 				end
+				setState(id .. "_anchor", live.anchor)
+				setState(id .. "_cursor", live.cursor)
+				setState(id .. "_focus", true)
 			end
 		end,
 
 		onDrag = function(dx, dy, mx, my, textIdx)
 			if textIdx >= 0 then
-				local targetIdx = isEmpty and 0 or math.min(textIdx, #currentText)
-				if curPos ~= targetIdx then
+				local isE = live.text == ""
+				local targetIdx = isE and 0 or math.min(textIdx, #live.text)
+				if live.cursor ~= targetIdx then
+					live.cursor = targetIdx
 					setState(id .. "_cursor", targetIdx)
 				end
 			end
 		end,
 
 		onTextInput = function(char)
-			local textToMod = currentText
-			local insertPos = curPos
-			local selMin, selMax = getSelection()
+			local textToMod = live.text
+			local insertPos = live.cursor
 
-			-- If text is selected, delete it first before inserting the new character
+			local selMin, selMax = nil, nil
+			if live.cursor ~= live.anchor then
+				selMin = math.min(live.cursor, live.anchor)
+				selMax = math.max(live.cursor, live.anchor)
+			end
+
 			if selMin then
-				textToMod = string.sub(currentText, 1, selMin) .. string.sub(currentText, selMax + 1)
+				textToMod = string.sub(live.text, 1, selMin) .. string.sub(live.text, selMax + 1)
 				insertPos = selMin
 			end
 
 			local newText = string.sub(textToMod, 1, insertPos) .. char .. string.sub(textToMod, insertPos + 1)
 			local newPos = insertPos + #char
 
-			setState(id .. "_cursor", newPos)
-			setState(id .. "_anchor", newPos) -- Clear selection
+			-- [!] Update live ref synchronously
+			live.text = newText
+			live.cursor = newPos
+			live.anchor = newPos
 
+			setState(id .. "_cursor", newPos)
+			setState(id .. "_anchor", newPos)
 			if not isControlled then
 				setState(id .. "_text", newText)
 			end
+
 			if props.onChange then
 				props.onChange(newText)
 			end
 		end,
 
 		onKeyDown = function(keyName, mods)
-			local newText = currentText
-			local newPos = curPos
-			local newAnchor = selAnchor
-			local selMin, selMax = getSelection()
+			local newText = live.text
+			local newPos = live.cursor
+			local newAnchor = live.anchor
 
-			-- Check if Shift is held down
+			local selMin, selMax = nil, nil
+			if live.cursor ~= live.anchor then
+				selMin = math.min(live.cursor, live.anchor)
+				selMax = math.max(live.cursor, live.anchor)
+			end
+
 			local isShift = (mods and mods.shift) or keyName == "LShift" or keyName == "RShift"
 
 			if keyName == "Backspace" then
 				if selMin then
-					newText = string.sub(currentText, 1, selMin) .. string.sub(currentText, selMax + 1)
+					newText = string.sub(live.text, 1, selMin) .. string.sub(live.text, selMax + 1)
 					newPos = selMin
-				elseif curPos > 0 then
-					newText = string.sub(currentText, 1, curPos - 1) .. string.sub(currentText, curPos + 1)
-					newPos = curPos - 1
+				elseif live.cursor > 0 then
+					newText = string.sub(live.text, 1, live.cursor - 1) .. string.sub(live.text, live.cursor + 1)
+					newPos = live.cursor - 1
 				end
-				newAnchor = newPos -- Clear selection
+				newAnchor = newPos
 			elseif keyName == "Delete" then
 				if selMin then
-					newText = string.sub(currentText, 1, selMin) .. string.sub(currentText, selMax + 1)
+					newText = string.sub(live.text, 1, selMin) .. string.sub(live.text, selMax + 1)
 					newPos = selMin
-				elseif curPos < #currentText then
-					newText = string.sub(currentText, 1, curPos) .. string.sub(currentText, curPos + 2)
+				elseif live.cursor < #live.text then
+					newText = string.sub(live.text, 1, live.cursor) .. string.sub(live.text, live.cursor + 2)
 				end
-				newAnchor = newPos -- Clear selection
+				newAnchor = newPos
 			elseif keyName == "Left" then
 				if not isShift and selMin then
-					newPos = selMin -- Browser behavior: snap to left edge of selection
+					newPos = selMin
 				else
-					newPos = math.max(0, curPos - 1)
+					newPos = math.max(0, live.cursor - 1)
 				end
 				if not isShift then
 					newAnchor = newPos
 				end
 			elseif keyName == "Right" then
 				if not isShift and selMax then
-					newPos = selMax -- Browser behavior: snap to right edge of selection
+					newPos = selMax
 				else
-					newPos = math.min(#currentText, curPos + 1)
+					newPos = math.min(#live.text, live.cursor + 1)
 				end
 				if not isShift then
 					newAnchor = newPos
@@ -180,19 +199,18 @@ function TextInput(props)
 					newAnchor = newPos
 				end
 			elseif keyName == "End" then
-				newPos = #currentText
+				newPos = #live.text
 				if not isShift then
 					newAnchor = newPos
 				end
 			elseif keyName == "a" or keyName == "A" then
-				-- Support Ctrl+A / Cmd+A to Select All
 				if mods and (mods.ctrl or mods.gui) then
 					newAnchor = 0
-					newPos = #currentText
+					newPos = #live.text
 				end
 			elseif keyName == "Return" or keyName == "KP_Enter" then
 				if props.onSubmit then
-					props.onSubmit(currentText)
+					props.onSubmit(live.text)
 					if not isControlled then
 						setState(id .. "_cursor", 0)
 						setState(id .. "_anchor", 0)
@@ -204,48 +222,49 @@ function TextInput(props)
 				end
 			elseif (keyName == "c" or keyName == "C") and (mods.ctrl or mods.gui) then
 				if selMin then
-					local selectedText = string.sub(currentText, selMin + 1, selMax)
-					vulpis.setClipboardText(selectedText)
+					vulpis.setClipboardText(string.sub(live.text, selMin + 1, selMax))
 				end
 			elseif (keyName == "x" or keyName == "X") and (mods.ctrl or mods.gui) then
 				if selMin then
-					local selectedText = string.sub(currentText, selMin + 1, selMax)
-					vulpis.setClipboardText(selectedText)
-					newText = string.sub(currentText, 1, selMin) .. string.sub(currentText, selMax + 1)
+					vulpis.setClipboardText(string.sub(live.text, selMin + 1, selMax))
+					newText = string.sub(live.text, 1, selMin) .. string.sub(live.text, selMax + 1)
 					newPos = selMin
 					newAnchor = newPos
 				end
 			elseif (keyName == "v" or keyName == "V") and (mods.ctrl or mods.gui) then
 				local pastedText = vulpis.getClipboardText()
 				if pastedText and pastedText ~= "" then
-					local textToMod = currentText
-					local insertPos = curPos
-
+					local textToMod = live.text
+					local insertPos = live.cursor
 					if selMin then
-						textToMod = string.sub(currentText, 1, selMin) .. string.sub(currentText, selMax + 1)
+						textToMod = string.sub(live.text, 1, selMin) .. string.sub(live.text, selMax + 1)
 						insertPos = selMin
 					end
-
 					newText = string.sub(textToMod, 1, insertPos) .. pastedText .. string.sub(textToMod, insertPos + 1)
-					newPos = curPos + #pastedText
+					newPos = insertPos + #pastedText
 					newAnchor = newPos
 				end
 			end
 
 			-- Only dispatch state updates if something actually changed
-			if newText ~= currentText or newPos ~= curPos or newAnchor ~= selAnchor then
+			if newText ~= live.text or newPos ~= live.cursor or newAnchor ~= live.anchor then
+				-- [!] Update live ref synchronously so the next event in this frame uses these values
+				local oldText = live.text
+				live.text = newText
+				live.cursor = newPos
+				live.anchor = newAnchor
+
 				setState(id .. "_cursor", newPos)
 				setState(id .. "_anchor", newAnchor)
 
-				if not isControlled and newText ~= currentText then
+				if not isControlled and newText ~= oldText then
 					setState(id .. "_text", newText)
 				end
-				if props.onChange and newText ~= currentText then
+				if props.onChange and newText ~= oldText then
 					props.onChange(newText)
 				end
 			end
 		end,
-
 		key = props.key or id,
 	}
 end

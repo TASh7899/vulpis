@@ -454,11 +454,6 @@ namespace VDOM {
       paintChanged = true;
     }
 
-    if (layoutChanged) {
-      n->makeLayoutDirty();
-    } else if (paintChanged) {
-      n->makePaintDirty();
-    }
 
     lua_pop(L, 1);
 
@@ -467,21 +462,44 @@ namespace VDOM {
     lua_pop(L, 1);
 
     lua_getfield(L, idx, "isFocused");
-    if (!lua_isnil(L, -1)) n->isFocused = lua_toboolean(L, -1);
+    if (!lua_isnil(L, -1)) {
+      bool newFocused = lua_toboolean(L, -1);
+      if (n->isFocused != newFocused) {
+        n->isFocused = newFocused;
+        paintChanged = true;
+      }
+    }
     lua_pop(L, 1);
 
     lua_getfield(L, idx, "cursorPosition");
-    if (lua_isnumber(L, -1)) n->cursorPosition = lua_tointeger(L, -1);
+    if (lua_isnumber(L, -1)) {
+      int newCursorPos = lua_tointeger(L, -1);
+      if (n->cursorPosition != newCursorPos) {
+        n->cursorPosition = newCursorPos;
+        paintChanged = true;
+      }
+    }
     lua_pop(L, 1);
 
     lua_getfield(L, idx, "selectionStart");
-    if (lua_isnumber(L, -1)) n->selectionStart = lua_tointeger(L, -1);
+    if (lua_isnumber(L, -1)) {
+      int newSelectionStart = lua_tointeger(L, -1);
+      if (n->selectionStart != newSelectionStart) {
+        n->selectionStart = newSelectionStart;
+        paintChanged = true;
+      }
+    }
     lua_pop(L, 1);
 
     lua_getfield(L, idx, "selectionEnd");
-    if (lua_isnumber(L, -1)) n->selectionEnd = lua_tointeger(L, -1);
+    if (lua_isnumber(L, -1)) {
+      int newSelectionEnd = lua_tointeger(L, -1);
+      if (n->selectionEnd != newSelectionEnd) {
+        n->selectionEnd = newSelectionEnd;
+        paintChanged = true;
+      }
+    }
     lua_pop(L, 1);
-
 
     updateCallback(L, idx, "onTextInput", n->onTextInputRef);
     updateCallback(L, idx, "onKeyDown", n->onKeyDownRef);
@@ -497,6 +515,12 @@ namespace VDOM {
     updateCallback(L, idx, "onMouseEnter", n->onMouseEnterRef);
     updateCallback(L, idx, "onMouseLeave", n->onMouseLeaveRef);
     updateCallback(L, idx, "onRightClick", n->onRightClickRef);
+
+    if (layoutChanged) {
+      n->makeLayoutDirty();
+    } else if (paintChanged) {
+      n->makePaintDirty();
+    }
 
   }
 

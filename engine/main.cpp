@@ -358,12 +358,15 @@ int main(int argc, char* argv[]) {
 // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 // ╏ CURSOR BLINKING ╏
 // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
-    if (currentTime - lastCursorToggle >= 500) {
-      needsRedraw = true;
-      lastCursorToggle = currentTime;
+
+    bool currentCursorState = ((currentTime - Input::lastInputTime) % 1000) < 500;
+
+    if (currentCursorState != lastCursorToggle) {
+      lastCursorToggle = currentCursorState; 
       Node* focused = Input::findFocusedNode(root);
       if (focused) {
         focused->makePaintDirty();
+        needsRedraw = true;
       }
     }
     if (needsRedraw) {

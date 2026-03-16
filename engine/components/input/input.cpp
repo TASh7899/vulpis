@@ -6,6 +6,8 @@
 #include <SDL_scancode.h>
 #include <SDL_stdinc.h>
 #include <algorithm>
+#include <cctype>
+#include <cstdint>
 #include <iostream>
 #include <iterator>
 #include <lauxlib.h>
@@ -22,6 +24,8 @@ namespace Input {
   static Node* activeDragNode = nullptr;
   static int dragInitialMouseX = 0;
   static int dragInitialMouseY = 0;
+
+  uint32_t lastInputTime = 0;
 
   static int numKeys = 0;
   static const Uint8* currentKeyStates = nullptr;
@@ -44,8 +48,21 @@ namespace Input {
   static int getTextIndexAtCoords(Node* n, int mx, int my) {
     if (!n || n->type != "text" || !n->font) return -1;
   
-    int startX = n->x + n->paddingLeft - n->scrollX;
+    float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
     std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
+
+    float totalWidth = 0;
+    for (uint32_t cp : codepoints) {
+      totalWidth += n->font->GetLogicalAdvance(cp);
+    }
+
+    float xOffset = 0;
+    if (!n->wordWrap) {
+      if (n->textAlign == TextAlign::Center) xOffset = (contentWidth - totalWidth) / 2.0f;
+      else if (n->textAlign == TextAlign::Right) xOffset = contentWidth - totalWidth;
+    }
+
+    float startX = n->x + n->paddingLeft - n->scrollX + xOffset;
     float currentX = startX;
 
     for (size_t i = 0; i < codepoints.size(); i++ ) {
@@ -183,6 +200,10 @@ namespace Input {
 
 
   void handleEvent(lua_State *L, SDL_Event &event, Node *root) {
+
+    if (event.type == SDL_KEYDOWN || event.type == SDL_TEXTINPUT || event.type == SDL_MOUSEBUTTONDOWN) {
+      lastInputTime = SDL_GetTicks();
+    }
 
     if (event.type == SDL_MOUSEMOTION) {
       int mx = event.motion.x;
@@ -487,4 +508,14 @@ namespace Input {
 
   AutoRegisterLua regKeyHeld("isKeyHeld", l_isKeyHeld);
   AutoRegisterLua regKeyPressed("isKeyJustPressed", l_isKeyJustPressed);
+
+
+
+
+  void clearNodeState(Node *n) {
+    if (activeDragNode == n) activeDragNode = nullptr;
+    if (draggedScrollbarNode == n) draggedScrollbarNode = nullptr;
+  }
+
+
 }

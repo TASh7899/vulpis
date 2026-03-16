@@ -1,8 +1,10 @@
 #pragma once
 #include <SDL2/SDL.h>
+#include <cstdint>
 #include "../ui/ui.h"
 
 namespace Input {
+  extern uint32_t lastInputTime;
   // determine which node is under the mouse
   Node* hitTest(Node* root, int x, int y, Node* ignore = nullptr);
   // handle all type of events like mouse clicks
@@ -11,5 +13,7 @@ namespace Input {
   void init();
   void updateState();
   Node* findFocusedNode(Node* root);
+
+  void clearNodeState(Node* n);
 
 }
