@@ -132,7 +132,7 @@ void OpenGLRenderer::beginFrame(const DamageRect& damage) {
     int sx = (int)std::floor(damage.x * dpiScale);
     int sw = (int)std::floor(damage.w * dpiScale);
     int sh = (int)std::floor(damage.h * dpiScale);
-    int sy = drawableH - (int)std::floor(damage.h * dpiScale) - sh;
+    int sy = drawableH - (int)std::floor(damage.y * dpiScale) - sh;
 
     sx = std::max(0, sx);
     sy = std::max(0, sy);

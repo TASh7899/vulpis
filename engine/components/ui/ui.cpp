@@ -4,6 +4,7 @@
 #include <SDL2/SDL_render.h>
 #include <SDL_timer.h>
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -11,6 +12,8 @@
 #include <lauxlib.h>
 #include <lua.h>
 #include <string>
+#include <type_traits>
+#include <variant>
 #include <vector>
 #include "../color/color.h"
 #include "../vdom/vdom.h"
@@ -580,7 +583,7 @@ void measure(Node* n) {
     n->contentW = maxW + n->paddingLeft + n->paddingRight;
 
     if (n->w == 0) n->w = maxW + n->paddingLeft + n->paddingRight;
-    if (n->h == 0) n->h = totalH + n->paddingTop + n->paddingBottom;
+    if (n->h == 0 && !n->overflowScroll) n->h = totalH + n->paddingTop + n->paddingBottom;
   }
   else if (n->type == "hbox") {
     int totalW = 0;
@@ -603,7 +606,7 @@ void measure(Node* n) {
     n->contentW = totalW + n->paddingLeft + n->paddingRight;
     n->contentH = maxH + n->paddingTop + n->paddingBottom;
 
-    if (n->w == 0) n->w = totalW + n->paddingRight + n->paddingLeft;
+    if (n->w == 0 && !n->overflowScroll) n->w = totalW + n->paddingRight + n->paddingLeft;
     if (n->h == 0) n->h = maxH + n->paddingTop + n->paddingBottom;
   }
 
@@ -650,13 +653,55 @@ void layout(Node* n, int x, int y) {
   }
 }
 
+
+void TranslateRenderCommand(RenderCommand& cmd, float dx, float dy) {
+  std::visit([dx, dy](auto& c){
+    using T = std::decay_t<decltype(c)>;
+    if constexpr (std::is_same_v<T, DrawRectCommand>) {
+      c.rect.x += dx;
+      c.rect.y += dy;
+    } else if constexpr (std::is_same_v<T, DrawTextCommand>) {
+      c.x += dx;
+      c.y += dy;
+    } else if constexpr (std::is_same_v<T, DrawImageCommand>) {
+      c.rect.x += dx;
+      c.rect.y += dy;
+    } else if constexpr (std::is_same_v<T, PushClipCommand>) {
+      c.rect.x += dx;
+      c.rect.y += dy;
+    }
+  }, cmd);
+}
+
+
 static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX,
     float parentOffsetY, bool isDragPass, bool isInsideDraggedNode, float parentAlpha) {
+
+  float totalOffsetX = parentOffsetX;
+  float totalOffsetY = parentOffsetY;
+
+  if (isDragPass) {
+    totalOffsetX += n->dragOffsetX;
+    totalOffsetY += n->dragOffsetY;
+  }
+
 
   // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
   // ╏ IF CLEAN, DUMP CACHE AND RETURN INSTANTLY ╏
   // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   if (!isDragPass && !n->isPaintDirty && n->hasCachedCommands) {
+    float dx = totalOffsetX - n->cachedOffsetX;
+    float dy = totalOffsetY - n->cachedOffsetY;
+
+    if (dx != 0.0f || dy != 0.0f) {
+      for (auto& cmd : n->cachedCommands.commands) {
+        TranslateRenderCommand(cmd, dx, dy);
+      }
+
+      n->cachedOffsetX = totalOffsetX;
+      n->cachedOffsetY = totalOffsetY;
+    }
+
     for (const auto& cmd : n->cachedCommands.commands) {
       list.push(cmd);
     }
@@ -665,6 +710,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
 
   bool treatAsDragged = isInsideDraggedNode || n->isDragging;
+
 
   if (isDragPass && !treatAsDragged) {
     for (Node* c : n->children) {
@@ -676,13 +722,6 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   size_t startIndex = list.commands.size();
 
   // Accumulate offsets
-  float totalOffsetX = parentOffsetX;
-  float totalOffsetY = parentOffsetY;
-
-  if (isDragPass) {
-    totalOffsetX += n->dragOffsetX;
-    totalOffsetY += n->dragOffsetY;
-  }
 
   float renderX = n->x + totalOffsetX;
   float renderY = n->y + totalOffsetY;
@@ -894,11 +933,10 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     }
   }
 
-  // Handle Clipping properly!
 
   // Render children
   for (Node* c : n->children) {
-    renderNodePass(c, list, totalOffsetX, totalOffsetY, isDragPass, treatAsDragged, parentAlpha);
+    renderNodePass(c, list, totalOffsetX - n->scrollX, totalOffsetY - n->scrollY, isDragPass, treatAsDragged, parentAlpha);
   }
 
   // Render Scrollbars
@@ -933,6 +971,9 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     }
     n->hasCachedCommands = true;
     n->isPaintDirty = false;
+
+    n->cachedOffsetX = totalOffsetX;
+    n->cachedOffsetY = totalOffsetY;
   }
 
 }
@@ -1180,7 +1221,7 @@ void UI_UpdateSmoothScrolling(Node *n, float dt) {
     }
 
     if (needsLayout) {
-      n->makeLayoutDirty();
+      n->makePaintDirty();
     }
   }
   for (Node* c : n->children) {
@@ -1252,3 +1293,6 @@ void DamageRect::update() {
   }
 
 }
+
+
+

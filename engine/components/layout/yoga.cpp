@@ -164,7 +164,7 @@ namespace Layout {
           maxChildRight = std::max(maxChildRight, childRelX + childW);
           maxChildBottom = std::max(maxChildBottom, childRelY + childH);
 
-          applyLayout(n->children[i], childNode, n->x - n->scrollX, n->y - n->scrollY);
+          applyLayout(n->children[i], childNode, n->x , n->y );
         }
 
         n->contentW = maxChildRight + n->paddingRight;

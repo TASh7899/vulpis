@@ -597,7 +597,39 @@ namespace VDOM {
   void reconcile(lua_State *L, Node *current, int idx) {
     if (!current) return;
 
+    float savedScrollX = current->scrollX;
+    float savedScrollY = current->scrollY;
+    float savedTargetScrollX = current->targetScrollX;
+    float savedTargetScrollY = current->targetScrollY;
+    float savedScrollbarTimer = current->scrollbarTimer;
+    float savedScrollbarOpacity = current->scrollbarOpacity;
+
+    float savedCachedOffsetX = current->cachedOffsetX;
+    float savedCachedOffsetY = current->cachedOffsetY;
+    bool savedHasCache = current->hasCachedCommands;
+    RenderCommandList savedCache = current->cachedCommands;
+
+    bool savedIsDragging = current->isDragging;
+    float savedDragOffsetX = current->dragOffsetX;
+    float savedDragOffsetY = current->dragOffsetY;
+
     patchNode(L, current, idx);
+
+    current->scrollX = savedScrollX;
+    current->scrollY = savedScrollY;
+    current->targetScrollX = savedTargetScrollX;
+    current->targetScrollY = savedTargetScrollY;
+    current->scrollbarTimer = savedScrollbarTimer;
+    current->scrollbarOpacity = savedScrollbarOpacity;
+
+    current->cachedOffsetX = savedCachedOffsetX;
+    current->cachedOffsetY = savedCachedOffsetY;
+    current->hasCachedCommands = savedHasCache;
+    current->cachedCommands = savedCache;
+
+    current->isDragging = savedIsDragging;
+    current->dragOffsetX = savedDragOffsetX;
+    current->dragOffsetY = savedDragOffsetY;
 
     lua_getfield(L, idx, "children");
     if (lua_istable(L, -1)) {

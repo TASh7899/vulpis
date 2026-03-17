@@ -62,7 +62,7 @@ namespace Input {
       else if (n->textAlign == TextAlign::Right) xOffset = contentWidth - totalWidth;
     }
 
-    float startX = n->x + n->paddingLeft - n->scrollX + xOffset;
+    float startX = n->x + n->paddingLeft - n->scrollX + xOffset + n->cachedOffsetX;
     float currentX = startX;
 
     for (size_t i = 0; i < codepoints.size(); i++ ) {
@@ -76,24 +76,37 @@ namespace Input {
   }
 
 
-  Node* hitTest(Node* root, int x, int y, Node* ignore) {
+  Node* hitTest(Node* root, int mx, int my, Node* ignore, float parentOffsetX, float parentOffsetY) {
     if (!root || root == ignore) return nullptr;
 
-    float currentX = root->x + root->dragOffsetX;
-    float currentY = root->y + root->dragOffsetY;
+    float totalOffsetX = parentOffsetX;
+    float totalOffsetY = parentOffsetY;
 
-    if (x < currentX || x > currentX + root->w || y < currentY || y > currentY + root->h) {
+    totalOffsetX += root->dragOffsetX;
+    totalOffsetY += root->dragOffsetY;
+
+    float screenX = root->x + totalOffsetX;
+    float screenY = root->y + totalOffsetY;
+
+    bool inBounds = (mx >= screenX && mx <= screenX + root->w &&
+                    my >= screenY && my <= screenY + root->h);
+
+    if (root->overflowHidden && !inBounds) {
       return nullptr;
     }
 
     for (int i = root->children.size() - 1; i >= 0; --i) {
-      Node* target = hitTest(root->children[i], x, y);
+      Node* target = hitTest(root->children[i], mx, my, ignore, totalOffsetX - root->scrollX, totalOffsetY - root->scrollY);
       if (target) {
         return target;
       }
     }
 
-    return root;
+    if (inBounds) {
+      return root;
+    }
+
+    return nullptr;
   }
 
 
@@ -214,7 +227,9 @@ namespace Input {
         ScrollbarMetrics sb = draggedScrollbarNode->getScrollbarMetrics();
 
         if (sb.isVisible) {
-          float localY = (my - dragOffsetY) - sb.trackY;
+          float screenTrackY = sb.trackY + draggedScrollbarNode->cachedOffsetY;
+
+          float localY = (my - dragOffsetY) - screenTrackY;
           float availableTrackSpace = sb.trackH - sb.thumbH;
 
           if (availableTrackSpace > 0) {
@@ -321,16 +336,20 @@ namespace Input {
           ScrollbarMetrics sb = curr->getScrollbarMetrics();
 
           if (sb.isVisible && curr->scrollbarOpacity > 0.0f) {
-            if (mx >= sb.trackX && mx <= sb.trackX + sb.trackW &&
-                my >= sb.trackY && my <= sb.trackY + sb.trackH) {
+            float screenTrackX = sb.trackX + curr->cachedOffsetX;
+            float screenTrackY = sb.trackY + curr->cachedOffsetY;
+
+            if (mx >= screenTrackX && mx <= screenTrackX + sb.trackW &&
+                my >= screenTrackY && my <= screenTrackY + sb.trackH) {
 
               draggedScrollbarNode = curr;
 
               float localY = my - sb.trackY;
               float availableTrackSpace = sb.trackH - sb.thumbH;
+              float screenThumbY = sb.thumbY + curr->cachedOffsetY;
 
-              if (my >= sb.thumbY && my <= sb.thumbY + sb.thumbH) {
-                dragOffsetY = my - (sb.thumbY + (sb.thumbH / 2.0f));
+              if (my >= screenThumbY && my <= screenThumbY + sb.thumbH) {
+                dragOffsetY = my - (screenThumbY + (sb.thumbH / 2.0f));
               } else {
                 dragOffsetY = 0.0f; // Clicked empty track, snap center
               }

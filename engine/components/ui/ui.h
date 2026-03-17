@@ -131,6 +131,10 @@ struct Node {
   bool overflowHidden = true;
   bool overflowScroll = false;
 
+  // cached offset for nodes position change
+  float cachedOffsetX = 0.0f;
+  float cachedOffsetY = 0.0f;
+
   bool wordWrap = true;
 
   float scrollX = 0.0f;
@@ -191,7 +195,6 @@ struct Node {
   bool hasRight = false; float rightVal = 0.0f;
   bool hasBottom = false; float bottomVal = 0.0f;
 
-  Node* hitTest(Node* root, int x, int y);
 
   float scrollbarOpacity = 0.0f;
   float scrollbarTimer = 0.0f;
@@ -209,20 +212,31 @@ struct Node {
   bool isLayoutDirty = true;
   bool isPaintDirty = true;
 
+  void markTreePaintDirty() {
+    isPaintDirty = true;
+    if (parent) {
+      parent->markTreePaintDirty();
+    }
+  }
+
+  void markTreeLayoutDirty() {
+    isLayoutDirty = true;
+    markTreePaintDirty();
+  }
 
   void makeLayoutDirty() {
     isLayoutDirty = true;
     makePaintDirty();
     if (parent) {
-      parent->makeLayoutDirty();
+      parent->markTreeLayoutDirty();
     }
   }
 
   void makePaintDirty() {
-    g_damageTracker.add(this->x, this->y, this->w, this->h);
+    g_damageTracker.add(this->x + this->cachedOffsetX, this->y + this->cachedOffsetY, this->w, this->h);
     isPaintDirty = true;
     if (parent) {
-      parent->makePaintDirty();
+      parent->markTreePaintDirty();
     }
   }
 
