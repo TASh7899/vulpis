@@ -19,10 +19,12 @@ namespace Layout {
     }
 
     float maxWidth = 999999.0f;
-    if (widthMode == YGMeasureModeExactly) {
-      maxWidth = width;
-    } else if (widthMode == YGMeasureModeAtMost) {
-      maxWidth = width;
+    if (n->wordWrap) {
+      if (widthMode == YGMeasureModeExactly) {
+        maxWidth = width;
+      } else if (widthMode == YGMeasureModeAtMost) {
+        maxWidth = width;
+      }
     }
 
     TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);

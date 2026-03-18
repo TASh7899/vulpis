@@ -20,6 +20,11 @@ void pushStateValue(lua_State* L, const StateValue& val) {
   }
 }
 
+StateManager& StateManager::instance() {
+  static StateManager inst;
+  return inst;
+}
+
 int l_setState(lua_State* L) {
   const char* key = luaL_checkstring(L, 1);
 

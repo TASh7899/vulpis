@@ -17,10 +17,8 @@ using StateValue = std::variant<int, float, std::string, bool>;
 
 class StateManager {
   public:
-    static StateManager& instance() {
-      static StateManager instance;
-      return instance;
-    }
+    static StateManager& instance();
+      
 
     StateValue getState(const std::string key, StateValue defaultValue) {
       if (store.find(key) == store.end()) {

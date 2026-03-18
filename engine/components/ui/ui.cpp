@@ -714,7 +714,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
   if (isDragPass && !treatAsDragged) {
     for (Node* c : n->children) {
-      renderNodePass(c, list, parentOffsetX, parentOffsetY, isDragPass, false, parentAlpha);
+      renderNodePass(c, list, totalOffsetX - n->scrollX, totalOffsetY - n->scrollY, isDragPass, false, parentAlpha);
     }
     return;
   }
@@ -1030,6 +1030,23 @@ void freeTree(lua_State* L, Node* n) {
     luaL_unref(L, LUA_REGISTRYINDEX, n->onDragEndRef);
     n->onDragEndRef = -2;
   }
+  if (n->onTextInputRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onTextInputRef);
+    n->onTextInputRef = -2;
+  }
+  if (n->onKeyDownRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onKeyDownRef);
+    n->onKeyDownRef = -2;
+  }
+  if (n->onFocusRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onFocusRef);
+    n->onFocusRef = -2;
+  }
+  if (n->onBlurRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onBlurRef);
+    n->onBlurRef = -2;
+  }
+
   for (Node* c : n->children) {
     freeTree(L, c);
   }

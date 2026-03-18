@@ -124,6 +124,13 @@ float Font::GetLogicalAdvance(uint32_t c) {
 
 Font::~Font() {
   glDeleteTextures(1, &textureID);
+
+  for (auto& pair : characters) {
+    if (pair.second.TextureID != 0) {
+      glDeleteTextures(1, &pair.second.TextureID);
+    }
+  }
+
   if (ftFace) {
     FT_Done_Face((FT_Face)ftFace);
   }

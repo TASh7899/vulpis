@@ -99,8 +99,8 @@ namespace VDOM {
       std::string newText = lua_tostring(L, -1);
       if (n->text != newText) {
         n->text = newText;
-        n->computedLines.clear();
-        layoutChanged = true;
+        n->makeLayoutDirty();
+        n->hasCachedCommands = false;
       }
     }
     lua_pop(L, 1);
@@ -459,6 +459,18 @@ namespace VDOM {
 
     lua_getfield(L, idx, "focusable");
     if (!lua_isnil(L, -1)) n->isFocusable = lua_toboolean(L, -1);
+    else n->isFocusable = false;
+    lua_pop(L, 1);
+
+    lua_getfield(L, idx, "draggable");
+    if (!lua_isnil(L, -1)) {
+        bool newDraggable = lua_toboolean(L, -1);
+        if (n->isDraggable != newDraggable) {
+            n->isDraggable = newDraggable;
+        }
+    } else {
+      n->isDraggable = false;
+    }
     lua_pop(L, 1);
 
     lua_getfield(L, idx, "isFocused");

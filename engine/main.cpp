@@ -370,6 +370,11 @@ int main(int argc, char* argv[]) {
       }
     }
     if (needsRedraw) {
+
+      if (root->isLayoutDirty || root->isPaintDirty) {
+        g_damageTracker.damageAll();
+      }
+
       if (root->isLayoutDirty) {
         solver->solve(root, {winW, winH});
         updateTextLayout(root);

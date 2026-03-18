@@ -245,8 +245,10 @@ namespace Input {
         int dy = my - dragInitialMouseY;
 
         if (activeDragNode->isDraggable) {
+          activeDragNode->makePaintDirty();
           activeDragNode->dragOffsetX = (float)dx;
           activeDragNode->dragOffsetY = (float)dy;
+          activeDragNode->makePaintDirty();
         }
 
         int textIdx = getTextIndexAtCoords(activeDragNode, mx, my);
@@ -375,14 +377,17 @@ namespace Input {
           if (focusCheck->isFocusable) {
             Node* focusedNode = findFocusedNode(root);
             if (focusedNode != focusCheck) {
-              if (focusedNode && focusedNode->onBlurRef != -2) {
-                lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onBlurRef);
-                if (lua_isfunction(L, -1)) lua_pcall(L, 0, 0, 0);
-                else lua_pop(L, 1);
+              if (focusedNode) {
+                focusedNode->isFocused = false;
+                if (focusedNode && focusedNode->onBlurRef != -2) {
+                  lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onBlurRef);
+                  if (lua_isfunction(L, -1)) lua_pcall(L, 0, 0, 0);
+                  else lua_pop(L, 1);
+                }
               }
-              focusedNode = focusCheck;
-              if (focusedNode->onFocusRef != -2) {
-                lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onFocusRef);
+              focusCheck->isFocused = true;
+              if (focusCheck->onFocusRef != -2) {
+                lua_rawgeti(L, LUA_REGISTRYINDEX, focusCheck->onFocusRef);
                 if (lua_isfunction(L, -1)) lua_pcall(L, 0, 0, 0);
                 else lua_pop(L, 1);
               }

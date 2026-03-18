@@ -221,7 +221,10 @@ struct Node {
 
   void markTreeLayoutDirty() {
     isLayoutDirty = true;
-    markTreePaintDirty();
+    isPaintDirty = true;
+    if (parent) {
+      parent->markTreeLayoutDirty();
+    }
   }
 
   void makeLayoutDirty() {
@@ -233,7 +236,7 @@ struct Node {
   }
 
   void makePaintDirty() {
-    g_damageTracker.add(this->x + this->cachedOffsetX, this->y + this->cachedOffsetY, this->w, this->h);
+    g_damageTracker.add(this->x + this->cachedOffsetX + this->dragOffsetX, this->y + this->cachedOffsetY + this->dragOffsetY, this->w, this->h);
     isPaintDirty = true;
     if (parent) {
       parent->markTreePaintDirty();
