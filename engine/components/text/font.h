@@ -52,10 +52,22 @@ class Font {
     float GetLogicalAscent() const { return (float)ascent / dpiScale; }
     float GetLogicalAdvance(uint32_t c);
 
+    void AllocateAtlasPage();
+
   private:
     unsigned int textureID;
     unsigned int lineHeight;
     unsigned int ascent;
+
+    unsigned int atlasWidth = 1024;
+    unsigned int atlasHeight = 1024;
+    unsigned int atlasOffsetX = 1;
+    unsigned int atlasOffsetY = 1;
+    unsigned int atlasRowHeight = 0;
+
+    std::vector<unsigned int> atlasPages;
+    unsigned int currentAtlasPage;
+
 
     std::string fontPath;
     unsigned int fontSize;

@@ -123,13 +123,11 @@ float Font::GetLogicalAdvance(uint32_t c) {
 }
 
 Font::~Font() {
-  glDeleteTextures(1, &textureID);
 
-  for (auto& pair : characters) {
-    if (pair.second.TextureID != 0) {
-      glDeleteTextures(1, &pair.second.TextureID);
-    }
+  for (unsigned int pageID : atlasPages) {
+    glDeleteTextures(1, &pageID);
   }
+
 
   if (ftFace) {
     FT_Done_Face((FT_Face)ftFace);
@@ -156,6 +154,36 @@ std::pair<int, Font*> UI_LoadFont(const std::string &path, int logicalSize, int 
   g_fonts[id] = std::move(font);
 
   return {id, fontptr};
+}
+
+
+void Font::AllocateAtlasPage() {
+  GLuint newTex;
+  glGenTextures(1, &newTex);
+  glBindTexture(GL_TEXTURE_2D, newTex);
+  
+  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, atlasWidth, atlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+
+  // Put a white pixel at (0,0)
+  unsigned char whitePixel = 255;
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RED, GL_UNSIGNED_BYTE, &whitePixel);
+
+  GLint swizzleMask[] = {GL_ONE, GL_ONE, GL_ONE, GL_RED};
+  glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+  atlasPages.push_back(newTex);
+  currentAtlasPage = newTex;
+
+  // Reset packing cursors for the new page
+  atlasOffsetX = 1;
+  atlasOffsetY = 1;
+  atlasRowHeight = 0;
 }
 
 
@@ -193,18 +221,7 @@ void Font::Load(const std::string& path, unsigned int size) {
   this->lineHeight = face->size->metrics.height >> 6;
   this->ascent = face->size->metrics.ascender >> 6;
 
-  glGenTextures(1, &textureID);
-  glBindTexture(GL_TEXTURE_2D, textureID);
-  unsigned char white[] = {255, 255, 255, 255};
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1, 1, 0, GL_RED, GL_UNSIGNED_BYTE, white);
-  GLint swizzleMask[] = {GL_ONE, GL_ONE, GL_ONE, GL_RED};
-  glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
+  AllocateAtlasPage();
 }
 
 
@@ -269,45 +286,53 @@ const Character* Font::LoadGlyph(uint32_t c) {
     return nullptr;
   }
 
-  if (face->glyph->bitmap.width == 0 && face->glyph->bitmap.rows == 0) {
+  unsigned int glyphW = face->glyph->bitmap.width;
+  unsigned int glyphH = face->glyph->bitmap.rows;
+
+  if (glyphW == 0 && glyphH == 0) {
     Character character = {
-      0, 0, 0, 0, 0, (unsigned int)face->glyph->advance.x, 0, 0, 0, 0
+      textureID, 0, 0, 0, 0, (unsigned int)face->glyph->advance.x, 0, 0, 0, 0 
     };
     return &characters.emplace(c, character).first->second;
   }
 
-  GLuint tex;
+  if (atlasOffsetX + glyphW + 1 >= atlasWidth) {
+    atlasOffsetY += atlasRowHeight + 1;
+    atlasOffsetX = 1;
+    atlasRowHeight = 0;
+  }
+
+  if (atlasOffsetY + glyphH + 1 >= atlasHeight) {
+    if (glyphW + 1 >= atlasWidth || glyphH + 1 >= atlasHeight) {
+      std::cerr << "ERROR: Glyph " << c << " is too large for the atlas!" << std::endl;
+      return nullptr;
+    }
+
+    AllocateAtlasPage();
+  }
+
+
+  glBindTexture(GL_TEXTURE_2D, currentAtlasPage);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glGenTextures(1, &tex);
-  glBindTexture(GL_TEXTURE_2D, tex);
 
-  glTexImage2D(
-      GL_TEXTURE_2D,
-      0,
-      GL_RED,
-      face->glyph->bitmap.width,
-      face->glyph->bitmap.rows,
-      0,
-      GL_RED,
-      GL_UNSIGNED_BYTE,
-      face->glyph->bitmap.buffer
-      );
+  glTexSubImage2D(GL_TEXTURE_2D, 0, atlasOffsetX, atlasOffsetY, glyphW, glyphH, GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
 
-  GLint swizzleMask[] = {GL_ONE, GL_ONE, GL_ONE, GL_RED};
-  glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+  float uMin = (float)atlasOffsetX / (float) atlasWidth;
+  float vMin = (float)atlasOffsetY / (float) atlasHeight;
+  float uMax = (float)(atlasOffsetX + glyphW) / (float) atlasWidth;
+  float vMax = (float)(atlasOffsetY + glyphH) / (float) atlasHeight;
 
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
   Character character = {
-    tex,
-    (int)face->glyph->bitmap.width, (int)face->glyph->bitmap.rows,
+    currentAtlasPage,
+    (int)glyphW, (int)glyphH,
     (int)face->glyph->bitmap_left, (int)face->glyph->bitmap_top,
     (unsigned int)face->glyph->advance.x,
-    0.0f, 0.0f, 1.0f, 1.0f // UVs are simple 0-1 because it's a single texture
+    uMin, vMin, uMax, vMax
   };
+
+  atlasOffsetX += glyphW + 1;
+  atlasRowHeight = std::max(atlasRowHeight, glyphW);
   // Insert into cache and return pointer
   return &characters.emplace(c, character).first->second;
 }
