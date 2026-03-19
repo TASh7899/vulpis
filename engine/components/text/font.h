@@ -32,7 +32,7 @@ class Font {
 
     const Character& GetCharacter(uint32_t c);
 
-    unsigned int GetTextureID() const { return textureID; }
+    unsigned int GetTextureID() const { return atlasPages.empty() ? 0 : atlasPages[0]; }
     unsigned int GetLineHeight() const { return lineHeight; }
     unsigned int GetAscent() const { return ascent; }
 
@@ -55,7 +55,6 @@ class Font {
     void AllocateAtlasPage();
 
   private:
-    unsigned int textureID;
     unsigned int lineHeight;
     unsigned int ascent;
 

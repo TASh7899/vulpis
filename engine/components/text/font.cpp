@@ -110,7 +110,7 @@ Font* UI_GetFontById(int id) {
 //          ╏                 FONT CLASS CONSTRUCTORS                 ╏
 //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
 Font::Font(const std::string& fontPath, unsigned int requestedFontSize, int styleFlags) : 
-  textureID(0), lineHeight(0), ascent(0), fontPath(fontPath), fontSize(requestedFontSize), styleFlags(styleFlags) {
+  lineHeight(0), ascent(0), fontPath(fontPath), fontSize(requestedFontSize), styleFlags(styleFlags), logicalSize(requestedFontSize) {
 
   this->dpiScale = UI_GetDPIScale();
 
@@ -291,7 +291,7 @@ const Character* Font::LoadGlyph(uint32_t c) {
 
   if (glyphW == 0 && glyphH == 0) {
     Character character = {
-      textureID, 0, 0, 0, 0, (unsigned int)face->glyph->advance.x, 0, 0, 0, 0 
+      currentAtlasPage, 0, 0, 0, 0, (unsigned int)face->glyph->advance.x, 0.0f, 0.0f, 0.0f, 0.0f 
     };
     return &characters.emplace(c, character).first->second;
   }
@@ -332,7 +332,7 @@ const Character* Font::LoadGlyph(uint32_t c) {
   };
 
   atlasOffsetX += glyphW + 1;
-  atlasRowHeight = std::max(atlasRowHeight, glyphW);
+  atlasRowHeight = std::max(atlasRowHeight, glyphH);
   // Insert into cache and return pointer
   return &characters.emplace(c, character).first->second;
 }
