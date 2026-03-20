@@ -14,15 +14,26 @@
 #include <utility>
 #include <vector>
 #include "../ui/ui.h"
+#include "core/BitmapRef.hpp"
+#include "core/Shape.h"
+#include "core/Vector2.hpp"
+#include "core/edge-coloring.h"
+#include "ext/import-font.h"
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
 
 #include "../system/pathUtils.h"
 #include "../../scripting/regsitry.h"
 
+#include <msdfgen.h>
+#include <msdfgen-ext.h>
+
 // file local global font storage
 static std::unordered_map<int, std::unique_ptr<Font>> g_fonts;
 static int g_nextFontId = 1;
+
+static msdfgen::FreetypeHandle* g_msdfFt = nullptr;
+static std::unordered_map<Font*, msdfgen::FontHandle*> g_msdfFonts;
 
 // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 // ╏ DPI SCALING HELPERS ╏
@@ -119,7 +130,7 @@ Font::Font(const std::string& fontPath, unsigned int requestedFontSize, int styl
 }
 
 float Font::GetLogicalAdvance(uint32_t c) {
-  return (float)(GetCharacter(c).Advance >> 6) / dpiScale;
+  return GetCharacter(c).Advance;
 }
 
 Font::~Font() {
@@ -128,9 +139,13 @@ Font::~Font() {
     glDeleteTextures(1, &pageID);
   }
 
-
   if (ftFace) {
     FT_Done_Face((FT_Face)ftFace);
+  }
+
+  if (g_msdfFonts.count(this)) {
+    msdfgen::destroyFont(g_msdfFonts[this]);
+    g_msdfFonts.erase(this);
   }
 }
 
@@ -163,19 +178,17 @@ void Font::AllocateAtlasPage() {
   glBindTexture(GL_TEXTURE_2D, newTex);
   
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, atlasWidth, atlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, atlasWidth, atlasHeight, 0, GL_RGB, GL_UNSIGNED_BYTE, nullptr);
 
   // Put a white pixel at (0,0)
-  unsigned char whitePixel = 255;
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RED, GL_UNSIGNED_BYTE, &whitePixel);
+  unsigned char whitePixel[3] = {255, 255, 255};
+  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, whitePixel);
 
-  GLint swizzleMask[] = {GL_ONE, GL_ONE, GL_ONE, GL_RED};
-  glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
   atlasPages.push_back(newTex);
   currentAtlasPage = newTex;
@@ -193,12 +206,17 @@ void Font::AllocateAtlasPage() {
 // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
 
 static FT_Library g_ftLib = nullptr;
+
 void Font::Load(const std::string& path, unsigned int size) {
   if (g_ftLib == nullptr) {
     if (FT_Init_FreeType(&g_ftLib)) {
       std::cerr << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
       return;
     }
+  }
+
+  if (g_msdfFt == nullptr) {
+    g_msdfFt = msdfgen::initializeFreetype();
   }
 
   std::string fullpath = Vulpis::getAssetPath(path);
@@ -208,7 +226,7 @@ void Font::Load(const std::string& path, unsigned int size) {
     std::cerr << "Current Working Dir: " << std::filesystem::current_path() << std::endl;
     return;
   }
-  
+
   FT_Face face;
   if (FT_New_Face(g_ftLib, fullpath.c_str(), 0, &face)) {
     std::cerr << "ERROR::FREETYPE: Failed to load font: " << fullpath << std::endl;
@@ -221,79 +239,83 @@ void Font::Load(const std::string& path, unsigned int size) {
   this->lineHeight = face->size->metrics.height >> 6;
   this->ascent = face->size->metrics.ascender >> 6;
 
+  g_msdfFonts[this] = msdfgen::loadFont(g_msdfFt, fullpath.c_str());
+
   AllocateAtlasPage();
 }
 
 
 const Character* Font::LoadGlyph(uint32_t c) {
-  if (!ftFace) {
-    return nullptr;
-  }
+  if (!ftFace) return nullptr;
   FT_Face face = (FT_Face)ftFace;
 
-  if (c != '?' && FT_Get_Char_Index(face, c) == 0) {
-    return nullptr;
-  }
+  if (c != '?' && FT_Get_Char_Index(face, c) == 0) return nullptr;
 
-  if (styleFlags & FONT_STYLE_ITALIC) {
-    FT_Matrix matrix;
-    matrix.xx = 0x10000L;
-    matrix.xy = (FT_Fixed)(0.2f * 0x10000L);
-    matrix.yx = 0;
-    matrix.yy = 0x10000L;
-    FT_Set_Transform(face, &matrix, nullptr);
-  } else {
-    FT_Set_Transform(face, nullptr, nullptr);
-  }
+  int loadFlags = FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP | FT_LOAD_NO_HINTING;
+  if (FT_Load_Char(face, c, loadFlags)) return nullptr;
 
-  // Disable hinting on macOS for smooth Retina text!
-  int loadFlags = FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP;
-#ifdef __APPLE__
-  loadFlags |= FT_LOAD_NO_HINTING;
-#else
-  loadFlags |= FT_LOAD_TARGET_LIGHT;
-#endif
+  float logicalAdvance = (float)(face->glyph->advance.x >> 6) / this->dpiScale;
 
-  if (FT_Load_Char(face, c, loadFlags)) {
-    return nullptr;
-  }
+  int logicalW = face->glyph->metrics.width >> 6;
+  int logicalH = face->glyph->metrics.height >> 6;
 
-  if (styleFlags & (FONT_STYLE_BOLD | FONT_STYLE_SEMI_BOLD | FONT_STYLE_VERY_BOLD | FONT_STYLE_THIN)) {
-    FT_Pos strength = 0;
-
-    if (styleFlags & FONT_STYLE_VERY_BOLD) {
-      strength = 144;
-    }
-
-    else if (styleFlags & FONT_STYLE_BOLD) {
-      strength = 96;
-    }
-
-    else if (styleFlags & FONT_STYLE_SEMI_BOLD) {
-      strength = 48;
-    }
-
-    else if (styleFlags & FONT_STYLE_THIN) {
-      strength = -48;
-    }
-
-    if (strength != 0) {
-      FT_Outline_Embolden(&face->glyph->outline, strength);
-    }
-  }
-
-  if (FT_Render_Glyph(face->glyph, FT_RENDER_MODE_NORMAL)) {
-    return nullptr;
-  }
-
-  unsigned int glyphW = face->glyph->bitmap.width;
-  unsigned int glyphH = face->glyph->bitmap.rows;
-
-  if (glyphW == 0 && glyphH == 0) {
-    Character character = {
-      currentAtlasPage, 0, 0, 0, 0, (unsigned int)face->glyph->advance.x, 0.0f, 0.0f, 0.0f, 0.0f 
-    };
+  // Early exit & Cache for whitespace
+  if (logicalW == 0 && logicalH == 0) {
+    Character character = { currentAtlasPage, 0, 0, 0, 0, logicalAdvance, 0.0f, 0.0f, 0.0f, 0.0f };
     return &characters.emplace(c, character).first->second;
+  }
+
+  // Fallback if MSDFgen fails
+  auto cacheEmptyChar = [&]() {
+    Character character = { currentAtlasPage, 0, 0, 0, 0, logicalAdvance, 0.0f, 0.0f, 0.0f, 0.0f };
+    return &characters.emplace(c, character).first->second;
+  };
+
+  msdfgen::FontHandle* msdfFont = g_msdfFonts[this];
+  if (!msdfFont) return cacheEmptyChar();
+
+  msdfgen::Shape shape;
+  if (!msdfgen::loadGlyph(shape, msdfFont, c)) return cacheEmptyChar();
+
+  shape.normalize();
+  if (shape.contours.empty()) return cacheEmptyChar();
+
+  msdfgen::edgeColoringByDistance(shape, 3.0);
+  msdfgen::Shape::Bounds bounds = shape.getBounds();
+
+  msdfgen::FontMetrics metrics;
+  msdfgen::getFontMetrics(metrics, msdfFont);
+  double emSize = metrics.emSize > 0 ? metrics.emSize : (face->units_per_EM > 0 ? face->units_per_EM : 2048.0);
+
+  double genSize = 72.0f;
+  double scale = genSize / emSize;
+  
+  double pxRange = 8.0f;
+  double shapeRange = pxRange / scale;
+  int padding = 8;
+
+  msdfgen::Vector2 translate(-bounds.l + padding / scale, -bounds.b + padding / scale);
+
+  int glyphW = (int)std::ceil((bounds.r - bounds.l) * scale) + padding * 2;
+  int glyphH = (int)std::ceil((bounds.t - bounds.b) * scale) + padding * 2;
+
+
+  if (glyphW <= 0 || glyphH <= 0 || glyphW > 512 || glyphH > 512) {
+    return cacheEmptyChar();
+  }
+
+  msdfgen::Bitmap<float, 3> msdf(glyphW, glyphH);
+  msdfgen::generateMSDF(msdf, shape, shapeRange, scale, translate);
+
+  std::vector<unsigned char> pixels(glyphW * glyphH * 3);
+  for (int y = 0; y < glyphH; ++y) {
+    for (int x = 0; x < glyphW; ++x) {
+      int index = 3 * (y * glyphW + x);
+      const float* px = msdf(x, glyphH - 1 - y); // Flip Y for OpenGL
+      pixels[index + 0] = (unsigned char)std::clamp(px[0] * 255.0f, 0.0f, 255.0f);
+      pixels[index + 1] = (unsigned char)std::clamp(px[1] * 255.0f, 0.0f, 255.0f);
+      pixels[index + 2] = (unsigned char)std::clamp(px[2] * 255.0f, 0.0f, 255.0f);
+    }
   }
 
   if (atlasOffsetX + glyphW + 1 >= atlasWidth) {
@@ -305,35 +327,39 @@ const Character* Font::LoadGlyph(uint32_t c) {
   if (atlasOffsetY + glyphH + 1 >= atlasHeight) {
     if (glyphW + 1 >= atlasWidth || glyphH + 1 >= atlasHeight) {
       std::cerr << "ERROR: Glyph " << c << " is too large for the atlas!" << std::endl;
-      return nullptr;
+      return cacheEmptyChar();
     }
-
     AllocateAtlasPage();
   }
 
-
   glBindTexture(GL_TEXTURE_2D, currentAtlasPage);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-
-  glTexSubImage2D(GL_TEXTURE_2D, 0, atlasOffsetX, atlasOffsetY, glyphW, glyphH, GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
+  glTexSubImage2D(GL_TEXTURE_2D, 0, atlasOffsetX, atlasOffsetY, glyphW, glyphH, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
 
   float uMin = (float)atlasOffsetX / (float) atlasWidth;
   float vMin = (float)atlasOffsetY / (float) atlasHeight;
   float uMax = (float)(atlasOffsetX + glyphW) / (float) atlasWidth;
   float vMax = (float)(atlasOffsetY + glyphH) / (float) atlasHeight;
 
+  double physicalFontSize = (double)this->fontSize * (double)this->dpiScale;
+  double layoutScale = (double)this->fontSize / emSize;
+  double ratio = layoutScale / scale;
+
+float quadW = (float)(glyphW * ratio);
+  float quadH = (float)(glyphH * ratio);
+
+  float bearingX = (float)(bounds.l * layoutScale) - (float)(padding * ratio);
+  float bearingY = (float)(bounds.t * layoutScale) + (float)(padding * ratio);
 
   Character character = {
-    currentAtlasPage,
-    (int)glyphW, (int)glyphH,
-    (int)face->glyph->bitmap_left, (int)face->glyph->bitmap_top,
-    (unsigned int)face->glyph->advance.x,
+    currentAtlasPage, quadW, quadH, bearingX, bearingY,
+    logicalAdvance,
     uMin, vMin, uMax, vMax
   };
 
   atlasOffsetX += glyphW + 1;
-  atlasRowHeight = std::max(atlasRowHeight, glyphH);
-  // Insert into cache and return pointer
+  atlasRowHeight = std::max(atlasRowHeight, (unsigned int)glyphH);
+
   return &characters.emplace(c, character).first->second;
 }
 

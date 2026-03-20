@@ -12,33 +12,90 @@
 
 const char* vertexSource = R"(
 #version 330 core
-layout (location = 0) in vec2 aPos;
-layout (location = 1) in vec2 aTextCoord;
-layout (location = 2) in vec4 aColor;
+  layout (location = 0) in vec2 aPos;
+  layout (location = 1) in vec2 aTextCoord;
+  layout (location = 2) in vec4 aColor;
+  layout (location = 3) in float aType;
+  layout (location = 4) in float aWeight;
 
-out vec4 fColor;
-out vec2 fTextCoord;
-uniform mat4 projection;
+  out vec4 fColor;
+  out vec2 fTextCoord;
+  uniform mat4 projection;
+  out float fType;
+  out float fWeight;
 
-void main() {
-  gl_Position = projection * vec4(aPos, 0.0, 1.0);
-  fColor = aColor;
-  fTextCoord = aTextCoord;
-}
+
+  void main() {
+    gl_Position = projection * vec4(aPos, 0.0, 1.0);
+    fColor = aColor;
+    fTextCoord = aTextCoord;
+    fType = aType;
+    fWeight = aWeight;
+  }
 )";
 
 const char* fragmentSource = R"(
-  #version 330 core
-  out vec4 FragColor;
-  in vec4 fColor;
-  in vec2 fTextCoord;
+#version 330 core
 
-  uniform sampler2D texSampler;
+out vec4 FragColor;
 
-  void main() {
-      FragColor = fColor * texture(texSampler, fTextCoord);
-  }
+in vec4 fColor;
+in vec2 fTextCoord;
+in float fType;
+in float fWeight;
+
+uniform sampler2D texSampler;
+uniform float u_pxRange;
+
+float median(float r, float g, float b) {
+    return max(min(r, g), min(max(r, g), b));
+}
+
+void main() {
+    if (fType > 0.5) {
+        vec3 msd = texture(texSampler, fTextCoord).rgb;
+        float sd = median(msd.r, msd.g, msd.b);
+
+        vec2 texSize = vec2(textureSize(texSampler, 0));
+        vec2 unitRange = vec2(u_pxRange) / texSize;
+
+        vec2 fw = max(fwidth(fTextCoord), vec2(1e-6));
+        vec2 screenTexSize = 1.0 / fw;
+
+        float screenPxRange = max(0.5 * dot(unitRange, screenTexSize), 1.0);
+
+        float alpha = clamp(screenPxRange * (sd - fWeight) + 0.5, 0.0, 1.0);
+
+        FragColor = vec4(fColor.rgb, fColor.a * alpha);
+    } else {
+        FragColor = fColor * texture(texSampler, fTextCoord);
+    }
+}
 )";
+
+static void checkShader(GLuint shader, const char* name) {
+    GLint ok = 0;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        GLint len = 0;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &len);
+        std::string log(len, '\0');
+        glGetShaderInfoLog(shader, len, nullptr, log.data());
+        std::cerr << "Shader compile failed (" << name << "):\n" << log << std::endl;
+    }
+}
+
+static void checkProgram(GLuint program) {
+    GLint ok = 0;
+    glGetProgramiv(program, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        GLint len = 0;
+        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &len);
+        std::string log(len, '\0');
+        glGetProgramInfoLog(program, len, nullptr, log.data());
+        std::cerr << "Program link failed:\n" << log << std::endl;
+    }
+}
 
 OpenGLRenderer::OpenGLRenderer(SDL_Window* win) : window(win) {
   context = SDL_GL_CreateContext(window);
@@ -79,23 +136,43 @@ OpenGLRenderer::~OpenGLRenderer() {
 }
 
 void OpenGLRenderer::initShaders() {
-  // Compile Vertex Shader
+  // --- Compile Vertex Shader ---
   GLuint vs = glCreateShader(GL_VERTEX_SHADER);
   glShaderSource(vs, 1, &vertexSource, NULL);
   glCompileShader(vs);
+  checkShader(vs, "vertex");
 
-  // Compile Fragment Shader
+  // --- Compile Fragment Shader ---
   GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
   glShaderSource(fs, 1, &fragmentSource, NULL);
   glCompileShader(fs);
+  checkShader(fs, "fragment");
 
+  // --- Link Program ---
   shaderProgram = glCreateProgram();
   glAttachShader(shaderProgram, vs);
   glAttachShader(shaderProgram, fs);
   glLinkProgram(shaderProgram);
+  checkProgram(shaderProgram);
 
   glDeleteShader(fs);
   glDeleteShader(vs);
+
+  // --- Setup uniforms ---
+  glUseProgram(shaderProgram);
+
+  GLint texLoc = glGetUniformLocation(shaderProgram, "texSampler");
+  if (texLoc == -1)
+    std::cerr << "texSampler uniform not found!" << std::endl;
+  glUniform1i(texLoc, 0); // texture unit 0
+
+  GLint pxRangeLoc = glGetUniformLocation(shaderProgram, "u_pxRange");
+  if (pxRangeLoc == -1)
+    std::cerr << "u_pxRange uniform not found!" << std::endl;
+
+  glUniform1f(pxRangeLoc, 8.0f); // MUST match MSDF generation
+
+  glUseProgram(0);
 }
 
 void OpenGLRenderer::initBuffers() {
@@ -114,6 +191,12 @@ void OpenGLRenderer::initBuffers() {
 
   glEnableVertexAttribArray(2); // Color
   glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, color));
+
+  glEnableVertexAttribArray(3); // Type
+  glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, type));
+
+  glEnableVertexAttribArray(4); // Weight
+  glVertexAttribPointer(4, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, weight));
 
   glBindVertexArray(0);
 }
@@ -143,7 +226,7 @@ void OpenGLRenderer::beginFrame(const DamageRect& damage) {
   } else {
     glDisable(GL_SCISSOR_TEST);
   }
-  
+
   glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -176,12 +259,15 @@ void OpenGLRenderer::endFrame() {
 void OpenGLRenderer::flush() {
   if (vertices.empty()) return;
 
+  glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, currentTextureID);
 
   glBindVertexArray(vao);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
-  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_DYNAMIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), nullptr, GL_DYNAMIC_DRAW);
+  glBufferSubData(GL_ARRAY_BUFFER, 0, vertices.size() * sizeof(Vertex), vertices.data());
+
   glDrawArrays(GL_TRIANGLES, 0, vertices.size());
 
   glBindVertexArray(0);
@@ -213,14 +299,14 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       Color c = data.color;
 
       // triangle 1
-      vertices.push_back({x, y, 0.0f, 0.0f, c});
-      vertices.push_back({x + w, y, 0.0f, 0.0f ,c});
-      vertices.push_back({x + w, y + h, 0.0f, 0.0f, c});
+      vertices.push_back({x, y, 0.0f, 0.0f, c, 0.0f, 0.5f});
+      vertices.push_back({x + w, y, 0.0f, 0.0f ,c, 0.0f, 0.5f});
+      vertices.push_back({x + w, y + h, 0.0f, 0.0f, c, 0.0f, 0.5f});
 
       // triangle 2
-      vertices.push_back({x, y, 0.0f, 0.0f, c});
-      vertices.push_back({x, y + h, 0.0f, 0.0f, c});
-      vertices.push_back({x + w, y + h, 0.0f, 0.0f, c});
+      vertices.push_back({x, y, 0.0f, 0.0f, c, 0.0f, 0.5f});
+      vertices.push_back({x, y + h, 0.0f, 0.0f, c, 0.0f, 0.5f});
+      vertices.push_back({x + w, y + h, 0.0f, 0.0f, c, 0.0f, 0.5f});
     }
 
     else if (std::holds_alternative<DrawTextCommand>(cmd)) {
@@ -253,6 +339,15 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
 
       std::vector<uint32_t> codepoints = Font::DecodeUTF8(data.text);
 
+      float weight = 0.5f; 
+      int style = data.font->GetStyle();
+      if (style & FONT_STYLE_VERY_BOLD) weight = 0.35f;
+      else if (style & FONT_STYLE_BOLD) weight = 0.40f;
+      else if (style & FONT_STYLE_SEMI_BOLD) weight = 0.45f;
+      else if (style & FONT_STYLE_THIN) weight = 0.60f;
+
+      float slantRatio = (style & FONT_STYLE_ITALIC) ? 0.2f : 0.0f;
+
       for (uint32_t c : codepoints) {
         const Character& ch = data.font->GetCharacter(c);
 
@@ -261,28 +356,31 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
           currentTextureID = ch.TextureID;
         }
 
-        float xpos = snap(cursorX + (ch.BearingX / dpiScale));
-        float ypos = snap(cursorY + ((ch.SizeY - ch.BearingY) / dpiScale));
-        float w = (float)ch.SizeX / dpiScale;
-        float h = (float)ch.SizeY / dpiScale;
+        float xpos = cursorX + ch.BearingX;
+        float ypos = cursorY - ch.BearingY;
 
+        float w = ch.SizeX;
+        float h = ch.SizeY;
 
         float left   = xpos;
         float right  = xpos + w;
-        float top    = ypos - h;
-        float bottom = ypos;
+        float top    = ypos;
+        float bottom = ypos + h;
+
+        float slant = h * slantRatio;
 
         // Triangle 1 (Top-Right -> Bottom-Right -> Bottom-Left)
-        vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
-        vertices.push_back({ right,              bottom, ch.uMax, ch.vMax, data.color });
-        vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
+        vertices.push_back({ right + slant, top,    ch.uMax, ch.vMin, data.color, 1.0f, weight });
+        vertices.push_back({ right,         bottom, ch.uMax, ch.vMax, data.color, 1.0f, weight });
+        vertices.push_back({ left,          bottom, ch.uMin, ch.vMax, data.color, 1.0f, weight });
 
         // Triangle 2 (Bottom-Left -> Top-Left -> Top-Right)
-        vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
-        vertices.push_back({ left,  top,    ch.uMin, ch.vMin, data.color });
-        vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
+        vertices.push_back({ left,          bottom, ch.uMin, ch.vMax, data.color, 1.0f, weight });
+        vertices.push_back({ left + slant,  top,    ch.uMin, ch.vMin, data.color, 1.0f, weight });
+        vertices.push_back({ right + slant, top,    ch.uMax, ch.vMin, data.color, 1.0f, weight });
 
-        cursorX += ((ch.Advance >> 6) / dpiScale);
+        // Restore the 1/64th bitshift AND the DPI scale for the spacing!
+        cursorX += ch.Advance;
       }
 
       // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
@@ -303,14 +401,14 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         float lineBottom = snap(rawY + (decorationThickness / dpiScale));
 
         // triangle 1
-        vertices.push_back({ textStartX + width, lineY,                       0.0f, 0.0f, data.color }); // TR
-        vertices.push_back({ textStartX + width, lineBottom, 0.0f, 0.0f, data.color }); // BR
-        vertices.push_back({ textStartX,         lineBottom, 0.0f, 0.0f, data.color }); // BL
+        vertices.push_back({ textStartX + width, lineY,      0.0f, 0.0f, data.color, 0.0f, 0.5f }); 
+        vertices.push_back({ textStartX + width, lineBottom, 0.0f, 0.0f, data.color, 0.0f, 0.5f }); 
+        vertices.push_back({ textStartX,         lineBottom, 0.0f, 0.0f, data.color, 0.0f, 0.5f }); 
 
         // Triangle 2
-        vertices.push_back({ textStartX,         lineBottom, 0.0f, 0.0f, data.color }); // BL
-        vertices.push_back({ textStartX,         lineY,                       0.0f, 0.0f, data.color }); // TL
-        vertices.push_back({ textStartX + width, lineY,                       0.0f, 0.0f, data.color }); // TR
+        vertices.push_back({ textStartX,         lineBottom, 0.0f, 0.0f, data.color, 0.0f, 0.5f }); 
+        vertices.push_back({ textStartX,         lineY,      0.0f, 0.0f, data.color, 0.0f, 0.5f }); 
+        vertices.push_back({ textStartX + width, lineY,      0.0f, 0.0f, data.color, 0.0f, 0.5f });
 
       }
     }
@@ -392,13 +490,13 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       float right  = snap(data.rect.x + data.rect.w);
       float bottom = snap(data.rect.y + data.rect.h);
 
-      vertices.push_back({left, top, data.uMin, data.vMin, data.tint});
-      vertices.push_back({right, top, data.uMax, data.vMin, data.tint});
-      vertices.push_back({right, bottom, data.uMax, data.vMax, data.tint});
+      vertices.push_back({left, top, data.uMin, data.vMin, data.tint, 0.0f, 0.5f});
+      vertices.push_back({right, top, data.uMax, data.vMin, data.tint, 0.0f, 0.5f});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, data.tint, 0.0f, 0.5f});
 
-      vertices.push_back({left, top, data.uMin, data.vMin, data.tint});
-      vertices.push_back({left, bottom, data.uMin, data.vMax, data.tint});
-      vertices.push_back({right, bottom, data.uMax, data.vMax, data.tint});
+      vertices.push_back({left, top, data.uMin, data.vMin, data.tint, 0.0f, 0.5f});
+      vertices.push_back({left, bottom, data.uMin, data.vMax, data.tint, 0.0f, 0.5f});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, data.tint, 0.0f, 0.5f});
 
     }
 

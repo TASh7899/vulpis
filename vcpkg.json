@@ -6,6 +6,7 @@
     "freetype",
     "lua",
     "yoga",
-    "opengl"
+    "opengl",
+    "tinyxml2"
   ]
 }

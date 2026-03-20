@@ -18,9 +18,9 @@ const int FONT_STYLE_VERY_BOLD = 1 << 4;
 
 struct Character {
   unsigned int TextureID;
-  int SizeX, SizeY;
-  int BearingX, BearingY;
-  unsigned int Advance;
+  float SizeX, SizeY;
+  float BearingX, BearingY;
+  float Advance;
   float uMin, vMin;
   float uMax, vMax;
 };

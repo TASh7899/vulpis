@@ -11,6 +11,8 @@ struct Vertex {
   float x, y;
   float u, v;
   Color color;
+  float type;
+  float weight;
 };
 
 class OpenGLRenderer : public Renderer {

@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 set(VCPKG_ROOT "${CMAKE_SOURCE_DIR}/third_party/vcpkg")
 
+
 if(EXISTS "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
   set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
 else()
@@ -27,9 +28,18 @@ find_package(OpenGL REQUIRED)
 find_package(Freetype REQUIRED) 
 find_package(yoga CONFIG REQUIRED)
 
+
 # 3. Manual GLAD (internal)
 add_library(glad STATIC third_party/glad/src/glad.c)
 target_include_directories(glad PUBLIC third_party/glad/include)
+
+set(MSDFGEN_BUILD_MSDFGEN_STANDALONE OFF CACHE BOOL "Disable msdfgen standalone executable" FORCE)
+set(MSDFGEN_USE_FREETYPE ON CACHE BOOL "Enable FreeType support in msdfgen" FORCE)
+set(MSDFGEN_USE_TINYXML2 ON CACHE BOOL "Enable TinyXML2 in msdfgen" FORCE)
+set(MSDFGEN_USE_SKIA OFF CACHE BOOL "Disable Skia in msdfgen" FORCE)
+
+add_subdirectory(third_party/msdfgen)
+
 
 # 4. Executable Definition
 add_executable(vulpis
@@ -59,8 +69,18 @@ target_link_libraries(vulpis PRIVATE
   OpenGL::GL
   glad
   Freetype::Freetype
+  msdfgen::msdfgen
+  msdfgen::msdfgen-ext
+
   ${CMAKE_DL_LIBS}
 )
+
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(vulpis PUBLIC OpenMP::OpenMP_CXX)
+    target_compile_options(vulpis PRIVATE ${OpenMP_CXX_FLAGS})
+endif()
 
 target_include_directories(vulpis PRIVATE 
   third_party/glad/include
