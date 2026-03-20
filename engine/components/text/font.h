@@ -17,7 +17,7 @@ const int FONT_STYLE_SEMI_BOLD = 1 << 3;
 const int FONT_STYLE_VERY_BOLD = 1 << 4;
 
 struct Character {
-  unsigned int TextureID;
+  float pageIndex;
   int SizeX, SizeY;
   int BearingX, BearingY;
   unsigned int Advance;
@@ -32,7 +32,7 @@ class Font {
 
     const Character& GetCharacter(uint32_t c);
 
-    unsigned int GetTextureID() const { return atlasPages.empty() ? 0 : atlasPages[0]; }
+    unsigned int GetTextureID() const { return atlasArrayID; }
     unsigned int GetLineHeight() const { return lineHeight; }
     unsigned int GetAscent() const { return ascent; }
 
@@ -64,8 +64,9 @@ class Font {
     unsigned int atlasOffsetY = 1;
     unsigned int atlasRowHeight = 0;
 
-    std::vector<unsigned int> atlasPages;
-    unsigned int currentAtlasPage;
+    unsigned int atlasArrayID = 0;
+    int currentLayer = -1;
+    int maxLayers = 8;
 
 
     std::string fontPath;

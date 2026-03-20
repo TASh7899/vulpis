@@ -110,7 +110,11 @@ Font* UI_GetFontById(int id) {
 //          ╏                 FONT CLASS CONSTRUCTORS                 ╏
 //          ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
 Font::Font(const std::string& fontPath, unsigned int requestedFontSize, int styleFlags) : 
-  lineHeight(0), ascent(0), fontPath(fontPath), fontSize(requestedFontSize), styleFlags(styleFlags), logicalSize(requestedFontSize) {
+  lineHeight(0), ascent(0), fontPath(fontPath), fontSize(requestedFontSize), styleFlags(styleFlags), logicalSize(requestedFontSize), 
+  atlasArrayID(0), currentLayer(-1), maxLayers(8), 
+  atlasWidth(1024), atlasHeight(1024), 
+  atlasOffsetX(1), atlasOffsetY(1), atlasRowHeight(0)
+{
 
   this->dpiScale = UI_GetDPIScale();
 
@@ -123,15 +127,8 @@ float Font::GetLogicalAdvance(uint32_t c) {
 }
 
 Font::~Font() {
-
-  for (unsigned int pageID : atlasPages) {
-    glDeleteTextures(1, &pageID);
-  }
-
-
-  if (ftFace) {
-    FT_Done_Face((FT_Face)ftFace);
-  }
+  if (atlasArrayID != 0) glDeleteTextures(1, &atlasArrayID);
+  if (ftFace) FT_Done_Face((FT_Face)ftFace);
 }
 
 
@@ -158,29 +155,29 @@ std::pair<int, Font*> UI_LoadFont(const std::string &path, int logicalSize, int 
 
 
 void Font::AllocateAtlasPage() {
-  GLuint newTex;
-  glGenTextures(1, &newTex);
-  glBindTexture(GL_TEXTURE_2D, newTex);
+  if (atlasArrayID == 0) {
+    glGenTextures(1, &atlasArrayID);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, atlasArrayID);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    std::vector<unsigned char> emptyData(atlasWidth * atlasHeight * maxLayers, 0);
   
-  glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, atlasWidth, atlasHeight, 0, GL_RED, GL_UNSIGNED_BYTE, nullptr);
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_R8, atlasWidth, atlasHeight, maxLayers, 0, GL_RED, GL_UNSIGNED_BYTE, emptyData.data());
 
-  // Put a white pixel at (0,0)
-  unsigned char whitePixel = 255;
-  glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RED, GL_UNSIGNED_BYTE, &whitePixel);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-  GLint swizzleMask[] = {GL_ONE, GL_ONE, GL_ONE, GL_RED};
-  glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE); 
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  }
 
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  currentLayer++;
+  if (currentLayer >= maxLayers) {
+    std::cerr << "WARNING: Font atlas array full! Increase maxLayers." << std::endl;
+    currentLayer = maxLayers - 1; // Prevent crash, overwrite last layer
+  }
 
-  atlasPages.push_back(newTex);
-  currentAtlasPage = newTex;
-
-  // Reset packing cursors for the new page
   atlasOffsetX = 1;
   atlasOffsetY = 1;
   atlasRowHeight = 0;
@@ -260,23 +257,18 @@ const Character* Font::LoadGlyph(uint32_t c) {
 
   if (styleFlags & (FONT_STYLE_BOLD | FONT_STYLE_SEMI_BOLD | FONT_STYLE_VERY_BOLD | FONT_STYLE_THIN)) {
     FT_Pos strength = 0;
-
     if (styleFlags & FONT_STYLE_VERY_BOLD) {
       strength = 144;
     }
-
     else if (styleFlags & FONT_STYLE_BOLD) {
       strength = 96;
     }
-
     else if (styleFlags & FONT_STYLE_SEMI_BOLD) {
       strength = 48;
     }
-
     else if (styleFlags & FONT_STYLE_THIN) {
       strength = -48;
     }
-
     if (strength != 0) {
       FT_Outline_Embolden(&face->glyph->outline, strength);
     }
@@ -291,7 +283,7 @@ const Character* Font::LoadGlyph(uint32_t c) {
 
   if (glyphW == 0 && glyphH == 0) {
     Character character = {
-      currentAtlasPage, 0, 0, 0, 0, (unsigned int)face->glyph->advance.x, 0.0f, 0.0f, 0.0f, 0.0f 
+      (float)std::max(0, currentLayer), 0, 0, 0, 0, (unsigned int)face->glyph->advance.x, 0.0f, 0.0f, 0.0f, 0.0f 
     };
     return &characters.emplace(c, character).first->second;
   }
@@ -312,10 +304,13 @@ const Character* Font::LoadGlyph(uint32_t c) {
   }
 
 
-  glBindTexture(GL_TEXTURE_2D, currentAtlasPage);
+  glBindTexture(GL_TEXTURE_2D_ARRAY, atlasArrayID);
   glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-  glTexSubImage2D(GL_TEXTURE_2D, 0, atlasOffsetX, atlasOffsetY, glyphW, glyphH, GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, std::abs(face->glyph->bitmap.pitch));
+
+  glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, atlasOffsetX, atlasOffsetY, currentLayer, glyphW, glyphH, 1, GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
+  glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
   float uMin = (float)atlasOffsetX / (float) atlasWidth;
   float vMin = (float)atlasOffsetY / (float) atlasHeight;
@@ -324,7 +319,7 @@ const Character* Font::LoadGlyph(uint32_t c) {
 
 
   Character character = {
-    currentAtlasPage,
+    (float)currentLayer,
     (int)glyphW, (int)glyphH,
     (int)face->glyph->bitmap_left, (int)face->glyph->bitmap_top,
     (unsigned int)face->glyph->advance.x,

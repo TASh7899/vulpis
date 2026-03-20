@@ -9,7 +9,7 @@
 
 struct Vertex {
   float x, y;
-  float u, v;
+  float u, v, page;
   Color color;
 };
 
@@ -34,6 +34,9 @@ class OpenGLRenderer : public Renderer {
 
     GLuint whiteTexture;
     GLuint currentTextureID;
+
+    GLuint useArrayLoc;
+    bool currentIsArray = false;
 
     std::vector<Vertex> vertices;
     void initShaders();

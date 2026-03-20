@@ -13,11 +13,11 @@
 const char* vertexSource = R"(
 #version 330 core
 layout (location = 0) in vec2 aPos;
-layout (location = 1) in vec2 aTextCoord;
+layout (location = 1) in vec3 aTextCoord;
 layout (location = 2) in vec4 aColor;
 
 out vec4 fColor;
-out vec2 fTextCoord;
+out vec3 fTextCoord;
 uniform mat4 projection;
 
 void main() {
@@ -31,12 +31,22 @@ const char* fragmentSource = R"(
   #version 330 core
   out vec4 FragColor;
   in vec4 fColor;
-  in vec2 fTextCoord;
+  in vec3 fTextCoord;
 
   uniform sampler2D texSampler;
+  uniform sampler2DArray fontSampler;
+  uniform int useArray;
 
   void main() {
-      FragColor = fColor * texture(texSampler, fTextCoord);
+    vec4 texColor;
+    if (useArray == 1) {
+      float mask = texture(fontSampler, fTextCoord).r;
+      mask = pow(max(mask, 0.0), 1.0/2.2);
+      texColor = vec4(1.0, 1.0, 1.0, mask);
+    } else {
+      texColor = texture(texSampler, fTextCoord.xy);
+    }
+    FragColor = fColor * texColor;
   }
 )";
 
@@ -109,11 +119,12 @@ void OpenGLRenderer::initBuffers() {
   glEnableVertexAttribArray(0); // pos
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE ,sizeof(Vertex), (void*)offsetof(Vertex, x));
 
-  glEnableVertexAttribArray(1); // UV
-  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
+  glEnableVertexAttribArray(1); // UVW
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, u));
 
   glEnableVertexAttribArray(2); // Color
   glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, color));
+
 
   glBindVertexArray(0);
 }
@@ -149,6 +160,13 @@ void OpenGLRenderer::beginFrame(const DamageRect& damage) {
 
   glUseProgram(shaderProgram);
 
+  useArrayLoc = glGetUniformLocation(shaderProgram, "useArray");
+  glUniform1i(useArrayLoc, 0);
+  currentIsArray = false;
+
+  glUniform1i(glGetUniformLocation(shaderProgram, "texSampler"), 0);
+  glUniform1i(glGetUniformLocation(shaderProgram, "fontSampler"), 1);
+
   float L = 0.0f, R = (float)winWidth;
   float B = (float)winHeight, T = 0.0f;
 
@@ -164,6 +182,7 @@ void OpenGLRenderer::beginFrame(const DamageRect& damage) {
 
   vertices.clear();
   currentTextureID = whiteTexture;
+  glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, currentTextureID);
 }
 
@@ -176,7 +195,6 @@ void OpenGLRenderer::endFrame() {
 void OpenGLRenderer::flush() {
   if (vertices.empty()) return;
 
-  glBindTexture(GL_TEXTURE_2D, currentTextureID);
 
   glBindVertexArray(vao);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
@@ -198,11 +216,14 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
   std::vector<Rect> clipStack;
 
   for (const auto& cmd : list.commands) {
-
     if (std::holds_alternative<DrawRectCommand>(cmd)) {
-      if (currentTextureID != whiteTexture) {
+      if ( currentIsArray || currentTextureID != whiteTexture) {
         flush();
+        currentIsArray = false;
+        glUniform1i(useArrayLoc, 0);
         currentTextureID = whiteTexture;
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, whiteTexture);
       }
 
       const auto& data = std::get<DrawRectCommand>(cmd);
@@ -213,14 +234,14 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       Color c = data.color;
 
       // triangle 1
-      vertices.push_back({x, y, 0.0f, 0.0f, c});
-      vertices.push_back({x + w, y, 0.0f, 0.0f ,c});
-      vertices.push_back({x + w, y + h, 0.0f, 0.0f, c});
+      vertices.push_back({x, y, 0.0f, 0.0f, 0.0f, c});
+      vertices.push_back({x + w, y, 0.0f, 0.0f, 0.0f, c});
+      vertices.push_back({x + w, y + h, 0.0f, 0.0f, 0.0f, c});
 
       // triangle 2
-      vertices.push_back({x, y, 0.0f, 0.0f, c});
-      vertices.push_back({x, y + h, 0.0f, 0.0f, c});
-      vertices.push_back({x + w, y + h, 0.0f, 0.0f, c});
+      vertices.push_back({x, y, 0.0f, 0.0f, 0.0f, c});
+      vertices.push_back({x, y + h, 0.0f, 0.0f, 0.0f, c});
+      vertices.push_back({x + w, y + h, 0.0f, 0.0f, 0.0f, c});
     }
 
     else if (std::holds_alternative<DrawTextCommand>(cmd)) {
@@ -242,9 +263,14 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
 
       GLuint fontTex = data.font->GetTextureID();
 
-      if (currentTextureID != fontTex) {
+      if (!currentIsArray || currentTextureID != fontTex) {
         flush();
+        currentIsArray = true;
+        glUniform1i(useArrayLoc, 1);
         currentTextureID = fontTex;
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, fontTex);
+        glActiveTexture(GL_TEXTURE0);
       }
 
       float cursorX = snap(data.x);
@@ -256,10 +282,6 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       for (uint32_t c : codepoints) {
         const Character& ch = data.font->GetCharacter(c);
 
-        if (ch.TextureID != currentTextureID) {
-          flush();
-          currentTextureID = ch.TextureID;
-        }
 
         float xpos = snap(cursorX + (ch.BearingX / dpiScale));
         float ypos = snap(cursorY + ((ch.SizeY - ch.BearingY) / dpiScale));
@@ -272,15 +294,13 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         float top    = ypos - h;
         float bottom = ypos;
 
-        // Triangle 1 (Top-Right -> Bottom-Right -> Bottom-Left)
-        vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
-        vertices.push_back({ right,              bottom, ch.uMax, ch.vMax, data.color });
-        vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
+        vertices.push_back({ right, top,    ch.uMax, ch.vMin, ch.pageIndex, data.color });
+        vertices.push_back({ right, bottom, ch.uMax, ch.vMax, ch.pageIndex, data.color });
+        vertices.push_back({ left,  bottom, ch.uMin, ch.vMax, ch.pageIndex, data.color });
 
-        // Triangle 2 (Bottom-Left -> Top-Left -> Top-Right)
-        vertices.push_back({ left,               bottom, ch.uMin, ch.vMax, data.color });
-        vertices.push_back({ left,  top,    ch.uMin, ch.vMin, data.color });
-        vertices.push_back({ right, top,    ch.uMax, ch.vMin, data.color });
+        vertices.push_back({ left,  bottom, ch.uMin, ch.vMax, ch.pageIndex, data.color });
+        vertices.push_back({ left,  top,    ch.uMin, ch.vMin, ch.pageIndex, data.color });
+        vertices.push_back({ right, top,    ch.uMax, ch.vMin, ch.pageIndex, data.color });
 
         cursorX += ((ch.Advance >> 6) / dpiScale);
       }
@@ -289,9 +309,13 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       // ╏ LOGIC FOR UNDERLINE OR STRIKE LINE ╏
       // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
       if (data.decoration != TextDecoration::None) {
-        if (currentTextureID != whiteTexture) {
+        if (currentIsArray || currentTextureID != whiteTexture) {
           flush();
+          currentIsArray = false;
+          glUniform1i(useArrayLoc, 0);
           currentTextureID = whiteTexture;
+          glActiveTexture(GL_TEXTURE0);
+          glBindTexture(GL_TEXTURE_2D, whiteTexture);
         }
 
         float decorationThickness = std::max(1.0f, std::round(fSize * 0.05f));
@@ -302,15 +326,13 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         float lineY = snap(rawY);
         float lineBottom = snap(rawY + (decorationThickness / dpiScale));
 
-        // triangle 1
-        vertices.push_back({ textStartX + width, lineY,                       0.0f, 0.0f, data.color }); // TR
-        vertices.push_back({ textStartX + width, lineBottom, 0.0f, 0.0f, data.color }); // BR
-        vertices.push_back({ textStartX,         lineBottom, 0.0f, 0.0f, data.color }); // BL
+        vertices.push_back({ textStartX + width, lineY,       0.0f, 0.0f, 0.0f, data.color });
+        vertices.push_back({ textStartX + width, lineBottom,  0.0f, 0.0f, 0.0f, data.color });
+        vertices.push_back({ textStartX,         lineBottom,  0.0f, 0.0f, 0.0f, data.color });
 
-        // Triangle 2
-        vertices.push_back({ textStartX,         lineBottom, 0.0f, 0.0f, data.color }); // BL
-        vertices.push_back({ textStartX,         lineY,                       0.0f, 0.0f, data.color }); // TL
-        vertices.push_back({ textStartX + width, lineY,                       0.0f, 0.0f, data.color }); // TR
+        vertices.push_back({ textStartX,         lineBottom,  0.0f, 0.0f, 0.0f, data.color });
+        vertices.push_back({ textStartX,         lineY,       0.0f, 0.0f, 0.0f, data.color });
+        vertices.push_back({ textStartX + width, lineY,       0.0f, 0.0f, 0.0f, data.color });
 
       }
     }
@@ -382,9 +404,13 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
     else if (std::holds_alternative<DrawImageCommand>(cmd)) {
       const auto& data = std::get<DrawImageCommand>(cmd);
 
-      if (currentTextureID != data.textureId) {
+      if ( currentIsArray || currentTextureID != data.textureId) {
         flush();
+        currentIsArray = false;
+        glUniform1i(useArrayLoc, 0);
         currentTextureID = data.textureId;
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, data.textureId);
       }
 
       float left   = snap(data.rect.x);
@@ -392,14 +418,13 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       float right  = snap(data.rect.x + data.rect.w);
       float bottom = snap(data.rect.y + data.rect.h);
 
-      vertices.push_back({left, top, data.uMin, data.vMin, data.tint});
-      vertices.push_back({right, top, data.uMax, data.vMin, data.tint});
-      vertices.push_back({right, bottom, data.uMax, data.vMax, data.tint});
+      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint});
+      vertices.push_back({right, top, data.uMax, data.vMin, 0.0f, data.tint});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint});
 
-      vertices.push_back({left, top, data.uMin, data.vMin, data.tint});
-      vertices.push_back({left, bottom, data.uMin, data.vMax, data.tint});
-      vertices.push_back({right, bottom, data.uMax, data.vMax, data.tint});
-
+      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint});
+      vertices.push_back({left, bottom, data.uMin, data.vMax, 0.0f, data.tint});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint});
     }
 
   }
