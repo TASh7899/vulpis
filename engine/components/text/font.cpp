@@ -1,3 +1,5 @@
+#define STB_RECT_PACK_IMPLEMENTATION
+
 #include "font.h"
 #include <SDL_gamecontroller.h>
 #include <algorithm>
@@ -16,6 +18,7 @@
 #include "../ui/ui.h"
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
+
 
 #include "../system/pathUtils.h"
 #include "../../scripting/regsitry.h"
@@ -113,11 +116,10 @@ Font::Font(const std::string& fontPath, unsigned int requestedFontSize, int styl
   lineHeight(0), ascent(0), fontPath(fontPath), fontSize(requestedFontSize), styleFlags(styleFlags), logicalSize(requestedFontSize), 
   atlasArrayID(0), currentLayer(-1), maxLayers(8), 
   atlasWidth(1024), atlasHeight(1024), 
-  atlasOffsetX(1), atlasOffsetY(1), atlasRowHeight(0)
+  packNodes(1024)
 {
 
   this->dpiScale = UI_GetDPIScale();
-
   unsigned int physicalSize = std::round(requestedFontSize * dpiScale);
   Load(fontPath, physicalSize);
 }
@@ -178,9 +180,7 @@ void Font::AllocateAtlasPage() {
     currentLayer = maxLayers - 1; // Prevent crash, overwrite last layer
   }
 
-  atlasOffsetX = 1;
-  atlasOffsetY = 1;
-  atlasRowHeight = 0;
+  stbrp_init_target(&packContext, (int)atlasWidth, (int)atlasHeight, packNodes.data(), (int)packNodes.size());
 }
 
 
@@ -288,20 +288,21 @@ const Character* Font::LoadGlyph(uint32_t c) {
     return &characters.emplace(c, character).first->second;
   }
 
-  if (atlasOffsetX + glyphW + 1 >= atlasWidth) {
-    atlasOffsetY += atlasRowHeight + 1;
-    atlasOffsetX = 1;
-    atlasRowHeight = 0;
-  }
+  stbrp_rect rect;
+  rect.id = c;
+  rect.w = glyphW + 1;
+  rect.h = glyphH + 1;
 
-  if (atlasOffsetY + glyphH + 1 >= atlasHeight) {
-    if (glyphW + 1 >= atlasWidth || glyphH + 1 >= atlasHeight) {
-      std::cerr << "ERROR: Glyph " << c << " is too large for the atlas!" << std::endl;
+  if (!stbrp_pack_rects(&packContext, &rect, 1)) {
+    AllocateAtlasPage();
+    if (!stbrp_pack_rects(&packContext, &rect, 1)) {
+      std::cerr << "ERROR: Glyph " << c << " is too large for a single atlas page!" << std::endl;
       return nullptr;
     }
-
-    AllocateAtlasPage();
   }
+
+  int packX = rect.x;
+  int packY = rect.y;
 
 
   glBindTexture(GL_TEXTURE_2D_ARRAY, atlasArrayID);
@@ -309,13 +310,13 @@ const Character* Font::LoadGlyph(uint32_t c) {
 
   glPixelStorei(GL_UNPACK_ROW_LENGTH, std::abs(face->glyph->bitmap.pitch));
 
-  glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, atlasOffsetX, atlasOffsetY, currentLayer, glyphW, glyphH, 1, GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
+  glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0, packX, packY, currentLayer, glyphW, glyphH, 1, GL_RED, GL_UNSIGNED_BYTE, face->glyph->bitmap.buffer);
   glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
-  float uMin = (float)atlasOffsetX / (float) atlasWidth;
-  float vMin = (float)atlasOffsetY / (float) atlasHeight;
-  float uMax = (float)(atlasOffsetX + glyphW) / (float) atlasWidth;
-  float vMax = (float)(atlasOffsetY + glyphH) / (float) atlasHeight;
+  float uMin = (float)packX / (float) atlasWidth;
+  float vMin = (float)packY / (float) atlasHeight;
+  float uMax = (float)(packX + glyphW) / (float) atlasWidth;
+  float vMax = (float)(packY + glyphH) / (float) atlasHeight;
 
 
   Character character = {
@@ -326,9 +327,6 @@ const Character* Font::LoadGlyph(uint32_t c) {
     uMin, vMin, uMax, vMax
   };
 
-  atlasOffsetX += glyphW + 1;
-  atlasRowHeight = std::max(atlasRowHeight, glyphH);
-  // Insert into cache and return pointer
   return &characters.emplace(c, character).first->second;
 }
 

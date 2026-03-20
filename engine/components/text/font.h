@@ -1,4 +1,5 @@
 #pragma once
+#include <stb_rect_pack.h>
 #include <cstdint>
 #include <string>
 #include <map>
@@ -8,6 +9,7 @@
 #include <utility>
 #include "../../lua.hpp"
 #include <vector>
+
 
 const int FONT_STYLE_NORMAL = 0;
 const int FONT_STYLE_BOLD   = 1 << 0;
@@ -60,14 +62,13 @@ class Font {
 
     unsigned int atlasWidth = 1024;
     unsigned int atlasHeight = 1024;
-    unsigned int atlasOffsetX = 1;
-    unsigned int atlasOffsetY = 1;
-    unsigned int atlasRowHeight = 0;
 
     unsigned int atlasArrayID = 0;
     int currentLayer = -1;
     int maxLayers = 8;
 
+    stbrp_context packContext;
+    std::vector<stbrp_node> packNodes;
 
     std::string fontPath;
     unsigned int fontSize;

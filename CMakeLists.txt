@@ -62,9 +62,10 @@ target_link_libraries(vulpis PRIVATE
   ${CMAKE_DL_LIBS}
 )
 
-target_include_directories(vulpis PRIVATE 
+target_include_directories(vulpis PRIVATE
   third_party/glad/include
   ${LUA_INCLUDE_DIR}
+  ${CMAKE_SOURCE_DIR}/third_party/stb_image
 )
 
 add_executable(asset_baker engine/tools/asset_baker.cpp)
