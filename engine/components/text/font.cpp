@@ -471,3 +471,66 @@ void UI_ShutdownFonts() {
   g_nextFontId = 1;
 }
 
+std::vector<TextLine> Font::CalculateWordWrap(const std::vector<uint32_t>& codepoints, float maxWidth) {
+  std::vector<TextLine> lines;
+  if (codepoints.empty()) return lines;
+
+  float currentWidth = 0.0f;
+  uint32_t lineStart = 0;
+  uint32_t lastSpaceIdx = -1;
+  float widthAtLastSpace = 0.0f;
+
+  for (uint32_t i = 0; i < codepoints.size(); i++) {
+    uint32_t c = codepoints[i];
+
+    if (c == '\n') {
+      lines.push_back({lineStart, i - lineStart, currentWidth});
+      lineStart = i + 1;
+      currentWidth = 0.0f;
+      lastSpaceIdx = -1;
+      continue;
+    }
+    if (c == '\r') {
+      continue;
+    }
+
+    float charWidth = GetLogicalAdvance(c);
+
+    if (c == ' ') {
+      lastSpaceIdx = i;
+      widthAtLastSpace = currentWidth;
+    }
+
+    if (currentWidth + charWidth > maxWidth && maxWidth > 0) {
+      if (lastSpaceIdx != -1 && lastSpaceIdx > lineStart) {
+        lines.push_back({lineStart, lastSpaceIdx - lineStart, widthAtLastSpace});
+        lineStart = lastSpaceIdx + 1;
+        i = lastSpaceIdx;
+      } else {
+        lines.push_back({lineStart, i - lineStart, currentWidth});
+        lineStart = i;
+      }
+      currentWidth = 0.0f;
+      lastSpaceIdx = -1;
+    } else {
+      currentWidth += charWidth;
+    }
+  } 
+
+  if (lineStart < codepoints.size()) {
+    lines.push_back({lineStart, (uint32_t)codepoints.size() - lineStart, currentWidth});
+  }
+
+  return lines;
+
+}
+
+
+
+
+
+
+
+
+
+

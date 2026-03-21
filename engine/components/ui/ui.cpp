@@ -709,7 +709,9 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   }
 
 
-  bool treatAsDragged = isInsideDraggedNode || n->isDragging;
+  float currentAlpha = parentAlpha * n->opacity;
+  bool treatAsDragged = isInsideDraggedNode || (n->isDragging && n->isDraggable);
+  float alphaMultiplier = (isDragPass && treatAsDragged) ? (currentAlpha * 0.7f) : currentAlpha;
 
 
   if (isDragPass && !treatAsDragged) {
@@ -726,9 +728,6 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   float renderX = n->x + totalOffsetX;
   float renderY = n->y + totalOffsetY;
 
-  // Make the dragged ghost slightly transparent (70% opacity)
-  float currentAlpha = parentAlpha * n->opacity;
-  float alphaMultiplier = (isDragPass && treatAsDragged) ? (currentAlpha * 0.7f) : currentAlpha;
 
 
   if (n->hasBackground) {
@@ -847,79 +846,109 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     if (font) {
       n->font = font;
       float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
-
+      float contentHeight = n->h - (n->paddingTop + n->paddingBottom);
       std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
-      float totalTextWidth = 0;
-      for (uint32_t cp : codepoints) {
-        totalTextWidth += font->GetLogicalAdvance(cp);
-      }
 
-      float xOffset = 0;
-      if (!n->wordWrap) {
-        if (n->textAlign == TextAlign::Center) xOffset = (contentWidth - totalTextWidth) / 2.0f;
-        else if (n->textAlign == TextAlign::Right) xOffset = contentWidth - totalTextWidth;
-      }
-
-      float cursorOffsetX = 0;
-      if (n->cursorPosition >= 0) {
-        for (int i = 0; i < std::min((int)codepoints.size(), n->cursorPosition); i++) {
-          cursorOffsetX += font->GetLogicalAdvance(codepoints[i]);
-        }
-
-        float actualCursorX = cursorOffsetX + xOffset;
-        if (actualCursorX - n->scrollX > contentWidth) {
-          n->scrollX = actualCursorX - contentWidth + 1.0f;
-        } else if (actualCursorX < n->scrollX) {
-          n->scrollX = actualCursorX;
-        }
-        if (n->scrollX < 0) n->scrollX = 0;
-      }
-
-
-      // apply the scrolling to start coordiantes
       float startX = renderX + n->paddingLeft - n->scrollX;
-      float cursorY = renderY + n->paddingTop + n->font->GetLogicalAscent();
+      float cursorY = renderY + n->paddingTop + n->font->GetLogicalAscent() - n->scrollY;
 
+      int selMin = -1, selMax = -1;
       if (n->selectionStart >= 0 && n->selectionEnd >= 0 && n->selectionStart != n->selectionEnd) {
-        int selMin = std::max(0, std::min({n->selectionStart, n->selectionEnd, (int)codepoints.size()}));
-        int selMax = std::max(0, std::min({std::max(n->selectionStart, n->selectionEnd), (int)codepoints.size()}));
-
-        float selStartX = 0;
-        float selWidth = 0;
-        for (int i = 0; i < selMax; i++) {
-          float adv = font->GetLogicalAdvance(codepoints[i]);
-          if (i < selMin) {
-            selStartX += adv;
-          } else {
-            selWidth += adv;
-          }
-        }
-
-        list.push(DrawRectCommand{
-            {startX + selStartX, renderY + n->paddingTop, selWidth, n->computedLineHeight},
-            {59, 130, 246, 128}
-            });
-
+          selMin = std::min(n->selectionStart, n->selectionEnd);
+          selMax = std::max(n->selectionStart, n->selectionEnd);
       }
 
-      if (n->cursorPosition >= 0) {
-        bool showCursor = ((SDL_GetTicks() - Input::lastInputTime) % 1000) < 500;
-        if (showCursor) {
-          list.push(DrawRectCommand{
-              {startX + cursorOffsetX, renderY + n->paddingTop, 1.0f, n->computedLineHeight},
-              {n->textColor.r, n->textColor.g, n->textColor.b, 255}
-              });
-        }
-      }
-
-      for (const std::string& line : n->computedLines) {
-        float lineXOffset = xOffset;
-
+      for (size_t lineIdx = 0; lineIdx < n->computedLines.size(); ++lineIdx) {
+        const TextLine& line = n->computedLines[lineIdx];
+        float lineXOffset = 0;
+        
         if (n->wordWrap) {
-          float lineWidth = 0;
-          for (char c : line) lineWidth += n->font->GetLogicalAdvance(c);
-          if (n->textAlign == TextAlign::Center)  lineXOffset = (contentWidth - lineWidth) / 2.0f;
-          else if (n->textAlign == TextAlign::Right) lineXOffset = contentWidth - lineWidth;
+          if (n->textAlign == TextAlign::Center)  lineXOffset = (contentWidth - line.width) / 2.0f;
+          else if (n->textAlign == TextAlign::Right) lineXOffset = contentWidth - line.width;
+        }
+
+        uint32_t lineEndIdx = line.startIndex + line.count;
+
+        // 1. DRAW MULTILINE SELECTION HIGHLIGHTS
+        if (selMin >= 0) {
+            if (selMin < (int)lineEndIdx && selMax > (int)line.startIndex) {
+                uint32_t localStart = std::max((uint32_t)0, selMin > (int)line.startIndex ? selMin - line.startIndex : 0);
+                uint32_t localEnd = std::min(line.count, (uint32_t)(selMax - line.startIndex));
+
+                float selOffsetX = 0;
+                float selWidth = 0;
+                for (uint32_t i = 0; i < line.count; i++) {
+                    float adv = font->GetLogicalAdvance(codepoints[line.startIndex + i]);
+                    if (i < localStart) selOffsetX += adv;
+                    else if (i < localEnd) selWidth += adv;
+                }
+
+                list.push(DrawRectCommand{
+                    {startX + lineXOffset + selOffsetX, cursorY - font->GetLogicalAscent(), selWidth, n->computedLineHeight},
+                    {59, 130, 246, 128} // Blue highlight
+                });
+            }
+        }
+
+        // 2. DRAW BLINKING CURSOR & HANDLE 2D AUTO-SCROLLING
+        if (n->cursorPosition >= 0 && n->cursorPosition >= (int)line.startIndex && n->cursorPosition <= (int)lineEndIdx) {
+            // Prevent drawing the cursor twice if it's at the boundary between two lines
+            bool isLastLine = (lineIdx == n->computedLines.size() - 1);
+            if (n->cursorPosition < (int)lineEndIdx || isLastLine || codepoints[n->cursorPosition-1] == '\n') {
+                float cursorOffsetX = 0;
+                uint32_t localCursor = n->cursorPosition - line.startIndex;
+                for (uint32_t i = 0; i < localCursor; i++) {
+                    cursorOffsetX += font->GetLogicalAdvance(codepoints[line.startIndex + i]);
+                }
+                
+                if (n->cursorPosition != n->lastCursorPosition) {
+
+                Node* scroller = n;
+                while (scroller && !scroller->overflowScroll) {
+                  scroller = scroller->parent;
+                }
+
+                if (scroller) {
+                  float sContentW = scroller->w - scroller->paddingLeft - scroller->paddingRight;
+                  float sContentH = scroller->h - scroller->paddingTop - scroller->paddingBottom;
+
+
+                  // Horizontal Auto-Scroll mapped to the parent
+                  float absoluteCursorX = (n->x - scroller->x - scroller->paddingLeft) + n->paddingLeft + lineXOffset + cursorOffsetX;
+                  if (absoluteCursorX < scroller->targetScrollX) {
+                    scroller->targetScrollX = absoluteCursorX;
+                  } else if (absoluteCursorX > scroller->targetScrollX + sContentW) {
+                    scroller->targetScrollX = absoluteCursorX - sContentW + 1.0f;
+                  }
+                  if (scroller->targetScrollX < 0) scroller->targetScrollX = 0;
+
+                  // Vertical Auto-Scroll mapped to absolute layout coordinates
+                  float absoluteCursorY = (n->y - scroller->y - scroller->paddingTop) + n->paddingTop + (lineIdx * n->computedLineHeight);
+                  if (absoluteCursorY < scroller->targetScrollY) {
+                    scroller->targetScrollY = absoluteCursorY; // Push view up
+                  } else if (absoluteCursorY + n->computedLineHeight > scroller->targetScrollY + sContentH) {
+                    scroller->targetScrollY = absoluteCursorY + n->computedLineHeight - sContentH; // Push view down
+                  }
+                }
+                n->lastCursorPosition = n->cursorPosition;
+              }
+
+
+                // Draw the actual cursor rect
+                bool showCursor = ((SDL_GetTicks() - Input::lastInputTime) % 1000) < 500;
+                if (showCursor) {
+                    list.push(DrawRectCommand{
+                        {startX + lineXOffset + cursorOffsetX, cursorY - font->GetLogicalAscent(), 1.0f, n->computedLineHeight},
+                        {n->textColor.r, n->textColor.g, n->textColor.b, 255}
+                    });
+                }
+            }
+        }
+
+        // 3. DRAW TEXT LINE
+        std::string lineStr = "";
+        for (uint32_t i = 0; i < line.count; i++) {
+            appendCP(lineStr, codepoints[line.startIndex + i]);
         }
 
         Color renderTextColor = {
@@ -927,14 +956,13 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
           (uint8_t)(n->textColor.a * alphaMultiplier)
         };
 
-        list.push(DrawTextCommand{line, n->font, startX + lineXOffset, cursorY, renderTextColor, n->textDecoration});
+        list.push(DrawTextCommand{lineStr, n->font, startX + lineXOffset, cursorY, renderTextColor, n->textDecoration});
+
         cursorY += n->computedLineHeight;
       }
     }
   }
 
-
-  // Render children
   for (Node* c : n->children) {
     renderNodePass(c, list, totalOffsetX - n->scrollX, totalOffsetY - n->scrollY, isDragPass, treatAsDragged, parentAlpha);
   }
@@ -1175,16 +1203,11 @@ void computeTextLayout(Node* n) {
 
   n->computedLineHeight = (float)n->font->GetLogicalLineHeight();
 
-  if (n->text.empty()) {
-    n->computedLines.clear();
-    return;
-  }
+  float maxWidth = n->wordWrap ? (n->w - (n->paddingLeft + n->paddingRight)) : 999999.0f;
 
+  auto codepoints = Font::DecodeUTF8(n->text);
+  n->computedLines = n->font->CalculateWordWrap(codepoints, maxWidth);
 
-  float maxWidth = n->wordWrap ? (n->w - (n->paddingLeft + n->paddingRight)) : std::numeric_limits<float>::max();;
-  TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
-
-  n->computedLines = res.lines;
 }
 
 void updateTextLayout(Node* root) {

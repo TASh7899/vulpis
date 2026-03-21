@@ -117,7 +117,7 @@ struct Node {
 
   TextAlign textAlign = TextAlign::Left;
 
-  std::vector<std::string> computedLines;
+  std::vector<TextLine> computedLines;
   float computedLineHeight = 0.0f;
 
   float flexShrink = 0.0f;
@@ -165,6 +165,7 @@ struct Node {
 
   // Cursor state for rendering
   int cursorPosition = -1; // -1 means no cursor/unfocused
+  int lastCursorPosition = -1;
   int selectionStart = -1;
   int selectionEnd = -1;
 
@@ -300,5 +301,7 @@ std::string getVariantKey(FontWeight w, FontStyle s);
 void parseEvents(lua_State* L, Node* n, int idx);
 int getFlags(Node* node);
 void UI_UpdateSmoothScrolling(Node* n, float dt);
+
+static void appendCP(std::string& s, uint32_t cp);
 
 void computeTextLayout(Node* n);

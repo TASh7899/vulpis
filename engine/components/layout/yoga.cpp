@@ -8,6 +8,7 @@
 #include <yoga/Yoga.h>
 #include <vector>
 #include "../ui/ui.h"
+#include "../text/font.h"
 
 namespace Layout {
 
@@ -19,24 +20,30 @@ namespace Layout {
     }
 
     float maxWidth = 999999.0f;
+
     if (n->wordWrap) {
-      if (widthMode == YGMeasureModeExactly) {
-        maxWidth = width;
-      } else if (widthMode == YGMeasureModeAtMost) {
+      if (widthMode == YGMeasureModeExactly || widthMode == YGMeasureModeAtMost) {
         maxWidth = width;
       }
     }
 
-    TextLayoutResult res = calculateTextLayout(n->text, n->font, maxWidth);
+    auto codepoints = Font::DecodeUTF8(n->text);
 
-    size.width = std::ceil(res.width);
-    size.height = std::ceil(res.height);
+    auto lines = n->font->CalculateWordWrap(codepoints, maxWidth);
+
+    float actualWidth = 0.0f;
+    for (const auto& line : lines) {
+      actualWidth = std::max(actualWidth, line.width);
+    }
+
+    float actualHeight = lines.size() * n->font->GetLogicalLineHeight();
+
+    size.width = std::ceil(actualWidth);
+    size.height = std::ceil(actualHeight);
 
     if (heightMode == YGMeasureModeExactly) {
       size.height = height;
-    } else if (heightMode == YGMeasureModeAtMost) {
-      size.height = std::min(height, size.height);
-    }
+    } 
 
     return size;
   }
@@ -198,5 +205,6 @@ namespace Layout {
   LayoutSolver* createYogaSolver() {
     return new YogaSolver();
   }
+
 
 }

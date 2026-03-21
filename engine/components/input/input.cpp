@@ -13,6 +13,7 @@
 #include <lauxlib.h>
 #include <lua.h>
 #include <pthread.h>
+#include <sys/types.h>
 #include <vector>
 #include <cstring>
 
@@ -46,33 +47,40 @@ namespace Input {
   }
 
   static int getTextIndexAtCoords(Node* n, int mx, int my) {
-    if (!n || n->type != "text" || !n->font) return -1;
+    if (!n || n->type != "text" || !n->font || n->computedLines.empty()) return -1;
   
     float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
     std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
 
-    float totalWidth = 0;
-    for (uint32_t cp : codepoints) {
-      totalWidth += n->font->GetLogicalAdvance(cp);
+    float startX = n->x + n->paddingLeft - n->scrollX + n->cachedOffsetX;
+    float startY = n->y + n->paddingTop - n->scrollY + n->cachedOffsetY;
+
+    float localY = my - startY;
+    int lineIdx = std::floor(localY / n->computedLineHeight);
+
+    if (lineIdx < 0) lineIdx = 0;
+    if (lineIdx >= (int)n->computedLines.size()) lineIdx = n->computedLines.size() - 1;
+    
+    const TextLine& line = n->computedLines[lineIdx];
+
+    float lineXOffset = 0;
+    if (n->wordWrap) {
+      if (n->textAlign == TextAlign::Center) lineXOffset = (contentWidth - line.width) / 2.0f;
+      else if (n->textAlign == TextAlign::Right) lineXOffset = contentWidth - line.width;
     }
 
-    float xOffset = 0;
-    if (!n->wordWrap) {
-      if (n->textAlign == TextAlign::Center) xOffset = (contentWidth - totalWidth) / 2.0f;
-      else if (n->textAlign == TextAlign::Right) xOffset = contentWidth - totalWidth;
-    }
+    // find the character in that line (X axis)
+    float currentX = startX + lineXOffset;
 
-    float startX = n->x + n->paddingLeft - n->scrollX + xOffset + n->cachedOffsetX;
-    float currentX = startX;
-
-    for (size_t i = 0; i < codepoints.size(); i++ ) {
-      float adv = n->font->GetLogicalAdvance(codepoints[i]);
-      if (mx < currentX + (adv / 2.0)) {
-        return i;
+    for (uint32_t i = 0; i < line.count; i++ ) {
+      uint32_t charIdx = line.startIndex + i;
+      float adv = n->font->GetLogicalAdvance(codepoints[charIdx]);
+      if (mx < currentX + (adv / 2.0f)) {
+        return charIdx;
       }
       currentX += adv;
     }
-    return codepoints.size();
+    return line.startIndex + line.count;
   }
 
 

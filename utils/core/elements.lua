@@ -94,9 +94,11 @@ function elements.Text(props, optionalStyle, optionalProps)
 		node.selectionStart = isFocused and anchor or -1
 		node.selectionEnd = isFocused and cursor or -1
 
+		node.cursorPosition = isFocused and cursor or -1
+
 		node.onDragStart = function(mx, my, textIdx, clicks)
 			if textIdx >= 0 then
-				if clicks and clicks >= 2 then
+				if clicks and clicks >= 3 then
 					setState(id .. "_cursor", #node.text)
 					setState(id .. "_anchor", 0)
 				else

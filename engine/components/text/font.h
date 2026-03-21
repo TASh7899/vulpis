@@ -27,6 +27,12 @@ struct Character {
   float uMax, vMax;
 };
 
+struct TextLine {
+  uint32_t startIndex;
+  uint32_t count;
+  float width;
+};
+
 class Font {
   public:
     Font(const std::string& fontPath, unsigned int fontSize, int styleFlags = FONT_STYLE_NORMAL);
@@ -55,6 +61,8 @@ class Font {
     float GetLogicalAdvance(uint32_t c);
 
     void AllocateAtlasPage();
+  
+    std::vector<TextLine> CalculateWordWrap(const std::vector<uint32_t>& codepoints, float maxWidth);
 
   private:
     unsigned int lineHeight;
