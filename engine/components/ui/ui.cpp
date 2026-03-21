@@ -86,6 +86,7 @@ Length getLength(lua_State* L, const char* key) {
   if (lua_isnumber(L, -1)) {
     len.value = (float)lua_tonumber(L, -1);
     len.type = PIXEL;
+    len.isSet = true;
   }
   else if (lua_isstring(L, -1)) {
     std::string s = lua_tostring(L, -1);
@@ -345,6 +346,7 @@ Node* buildNode(lua_State* L, int idx) {
   lua_getfield(L, idx, "text");
   if (lua_isstring(L, -1)) {
     n->text = lua_tostring(L, -1);
+    n->codepoints = Font::DecodeUTF8(n->text);
   }
   lua_pop(L, 1);
 
@@ -539,11 +541,11 @@ Node* buildNode(lua_State* L, int idx) {
 void resolveStyles(Node* n, int parentW, int parentH) {
   if (!n) return;
 
-  if (n->widthStyle.value != 0) {
+  if (n->widthStyle.isSet) {
     n->w = n->widthStyle.resolve((float)parentW);
   }
 
-  if (n->heightStyle.value != 0) {
+  if (n->heightStyle.isSet) {
     n->h = n->heightStyle.resolve((float)parentH);
   }
 
@@ -847,7 +849,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
       n->font = font;
       float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
       float contentHeight = n->h - (n->paddingTop + n->paddingBottom);
-      std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
+      const std::vector<uint32_t>& codepoints = n->codepoints;
 
       float startX = renderX + n->paddingLeft - n->scrollX;
       float cursorY = renderY + n->paddingTop + n->font->GetLogicalAscent() - n->scrollY;
@@ -1205,7 +1207,7 @@ void computeTextLayout(Node* n) {
 
   float maxWidth = n->wordWrap ? (n->w - (n->paddingLeft + n->paddingRight)) : 999999.0f;
 
-  auto codepoints = Font::DecodeUTF8(n->text);
+  const auto& codepoints = n->codepoints;
   n->computedLines = n->font->CalculateWordWrap(codepoints, maxWidth);
 
 }

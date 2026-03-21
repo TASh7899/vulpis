@@ -12,6 +12,7 @@
 #include <iterator>
 #include <lauxlib.h>
 #include <lua.h>
+#include <pstl/glue_algorithm_defs.h>
 #include <pthread.h>
 #include <sys/types.h>
 #include <vector>
@@ -50,7 +51,7 @@ namespace Input {
     if (!n || n->type != "text" || !n->font || n->computedLines.empty()) return -1;
   
     float contentWidth = n->w - (n->paddingLeft + n->paddingRight);
-    std::vector<uint32_t> codepoints = Font::DecodeUTF8(n->text);
+    const std::vector<uint32_t>& codepoints = n->codepoints;
 
     float startX = n->x + n->paddingLeft - n->scrollX + n->cachedOffsetX;
     float startY = n->y + n->paddingTop - n->scrollY + n->cachedOffsetY;
@@ -169,44 +170,49 @@ namespace Input {
     }
   }
 
-  void processHover(lua_State* L, Node* node, const std::vector<Node*>& activePath) {
-    if (!node) return;
+  static std::vector<Node*> lastHoveredPath;
 
-    bool shouldBeHovered = std::find(activePath.begin(), activePath.end(), node) != activePath.end();
-
-    if (shouldBeHovered && !node->isHovered) {
-      node->isHovered = true;
-      node->makePaintDirty();
-      if (node->onMouseEnterRef != -2) {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, node->onMouseEnterRef);
-        if (lua_isfunction(L, -1)) {
-          if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
-            std::cout << "Input Error (onMouseEnter): " << lua_tostring(L, -1) << std::endl;
+  void processHover(lua_State* L, const std::vector<Node*>& activePath) {
+    // 1. Fire onMouseLeave for nodes that are no longer hovered
+    for (Node* oldNode : lastHoveredPath) {
+      if (std::find(activePath.begin(), activePath.end(), oldNode) == activePath.end()) {
+        oldNode->isHovered = false;
+        oldNode->makePaintDirty();
+        if (oldNode->onMouseLeaveRef != -2) {
+          lua_rawgeti(L, LUA_REGISTRYINDEX, oldNode->onMouseLeaveRef);
+          if (lua_isfunction(L, -1)) {
+            if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+              std::cout << "Input Error (onMouseLeave): " << lua_tostring(L, -1) << std::endl;
+              lua_pop(L, 1);
+            }
+          } else {
             lua_pop(L, 1);
           }
-        } else {
-          lua_pop(L, 1);
-        }
-      }
-    } else if (!shouldBeHovered && node->isHovered) {
-      node->isHovered = false;
-      node->makePaintDirty();
-      if (node->onMouseLeaveRef != -2) {
-        lua_rawgeti(L, LUA_REGISTRYINDEX, node->onMouseLeaveRef);
-        if (lua_isfunction(L, -1)) {
-          if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
-            std::cout << "Input Error (onMouseLeave): " << lua_tostring(L, -1) << std::endl;
-            lua_pop(L, 1);
-          }
-        } else {
-          lua_pop(L, 1);
         }
       }
     }
 
-    for (Node* child : node->children) {
-      processHover(L, child, activePath);
+    // 2. Fire onMouseEnter for nodes that are newly hovered
+    for (Node* newNode : activePath) {
+      if (std::find(lastHoveredPath.begin(), lastHoveredPath.end(), newNode) == lastHoveredPath.end()) {
+        newNode->isHovered = true;
+        newNode->makePaintDirty();
+        if (newNode->onMouseEnterRef != -2) {
+          lua_rawgeti(L, LUA_REGISTRYINDEX, newNode->onMouseEnterRef);
+          if (lua_isfunction(L, -1)) {
+            if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+              std::cout << "Input Error (onMouseEnter): " << lua_tostring(L, -1) << std::endl;
+              lua_pop(L, 1);
+            }
+          } else {
+            lua_pop(L, 1);
+          }
+        }
+      }
     }
+
+    // 3. Save the current path for the next frame
+    lastHoveredPath = activePath;
   }
 
   Node* findFocusedNode(Node* root) {
@@ -271,7 +277,7 @@ namespace Input {
         curr = curr->parent;
       }
 
-      processHover(L, root, activePath);
+      processHover(L, activePath);
     }
 
     else if (event.type == SDL_MOUSEBUTTONUP) {
@@ -420,6 +426,7 @@ namespace Input {
           if (dragCheck->isDraggable || dragCheck->onDragRef != -2 || dragCheck->onDragStartRef != -2) {
             activeDragNode = dragCheck;
             activeDragNode->isDragging = true;
+            activeDragNode->lastCursorPosition = -1;
             dragInitialMouseX = mx;
             dragInitialMouseY = my;
 
@@ -469,6 +476,7 @@ namespace Input {
     else if (event.type == SDL_KEYDOWN) {  
       Node* focusedNode = findFocusedNode(root);
       if (focusedNode && focusedNode->onKeyDownRef != -2) {
+        focusedNode->lastCursorPosition = -1;
         lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onKeyDownRef);
         if (lua_isfunction(L, -1)) {
           lua_pushstring(L, SDL_GetKeyName(event.key.keysym.sym));
@@ -491,6 +499,7 @@ namespace Input {
     else if (event.type == SDL_TEXTINPUT) {
       Node* focusedNode = findFocusedNode(root);
       if (focusedNode && focusedNode->onTextInputRef != -2) {
+        focusedNode->lastCursorPosition = -1;
         lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onTextInputRef);
         if (lua_isfunction(L, -1)) {
           lua_pushstring(L, event.text.text);
@@ -547,6 +556,8 @@ namespace Input {
   void clearNodeState(Node *n) {
     if (activeDragNode == n) activeDragNode = nullptr;
     if (draggedScrollbarNode == n) draggedScrollbarNode = nullptr;
+
+    lastHoveredPath.erase(std::remove(lastHoveredPath.begin(), lastHoveredPath.end(), n), lastHoveredPath.end());
   }
 
 

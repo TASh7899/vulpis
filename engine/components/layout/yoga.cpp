@@ -27,7 +27,7 @@ namespace Layout {
       }
     }
 
-    auto codepoints = Font::DecodeUTF8(n->text);
+    const auto& codepoints = n->codepoints;
 
     auto lines = n->font->CalculateWordWrap(codepoints, maxWidth);
 
@@ -98,21 +98,27 @@ namespace Layout {
           YGNodeStyleSetFlexShrink(yogaNode, n->flexShrink);
         }
 
-        if (n->widthStyle.type == PERCENT) {
-          YGNodeStyleSetWidthPercent(yogaNode, n->widthStyle.value);
-        } else if (n->widthStyle.value > 0) {
-          YGNodeStyleSetWidth(yogaNode, n->widthStyle.value);
+        if (n->widthStyle.isSet) {
+          if (n->widthStyle.type == PERCENT) {
+            YGNodeStyleSetWidthPercent(yogaNode, n->widthStyle.value);
+          } else if (n->widthStyle.value > 0) {
+            YGNodeStyleSetWidth(yogaNode, n->widthStyle.value);
+          }
         }
 
-        if (n->heightStyle.type == PERCENT) {
-          YGNodeStyleSetHeightPercent(yogaNode, n->heightStyle.value);
-        } else if (n->heightStyle.value > 0) {
-          YGNodeStyleSetHeight(yogaNode, n->heightStyle.value);
+        if (n->widthStyle.isSet) {
+          if (n->heightStyle.type == PERCENT) {
+            YGNodeStyleSetHeightPercent(yogaNode, n->heightStyle.value);
+          } else if (n->heightStyle.value > 0) {
+            YGNodeStyleSetHeight(yogaNode, n->heightStyle.value);
+          }
         }
 
-        if (n->minWidth > 0) YGNodeStyleSetMinWidth(yogaNode, n->minWidth);
+
+        YGNodeStyleSetMinWidth(yogaNode, n->minWidth);
+        YGNodeStyleSetMinHeight(yogaNode, n->minHeight);
+
         if (n->maxWidth < 99999) YGNodeStyleSetMaxWidth(yogaNode, n->maxWidth);
-        if (n->minHeight > 0) YGNodeStyleSetMinHeight(yogaNode, n->minHeight);
         if (n->maxHeight < 99999) YGNodeStyleSetMaxHeight(yogaNode, n->maxHeight);
 
         YGNodeStyleSetAlignItems(yogaNode, mapAlign(n->alignItems));

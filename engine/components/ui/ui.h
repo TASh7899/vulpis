@@ -43,15 +43,17 @@ enum class TextAlign {
 struct Length {
   float value;
   UnitType type;
+  bool isSet;
 
-  Length() : value(0), type(UnitType::PIXEL) {}
-  Length(float v) : value(v), type(UnitType::PIXEL) {}
-  Length(int v) : value((float)v), type(UnitType::PIXEL) {}
+  Length() : value(0), type(UnitType::PIXEL), isSet(true) {}
+  Length(float v) : value(v), type(UnitType::PIXEL), isSet(true) {}
+  Length(int v) : value((float)v), type(UnitType::PIXEL), isSet(true) {}
 
   static Length Percent(float v) {
     Length l;
     l.value = v;
     l.type = UnitType::PERCENT;
+    l.isSet = true;
     return l;
   }
   
@@ -100,6 +102,7 @@ struct Node {
   uint32_t textureId = 0;
 
   std::string text;
+std::vector<uint32_t> codepoints;
   std::string objectFit = "fill";
   int fontId = 0;
   Font* font = nullptr;

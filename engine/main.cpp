@@ -287,10 +287,19 @@ int main(int argc, char* argv[]) {
     // smart event handling
     if (SDL_WaitEventTimeout(&event, 16)) {
       do {
-        needsRedraw = true;
         if (event.type == SDL_QUIT) {
           running = false;
         }
+
+        if (event.type == SDL_MOUSEMOTION) {
+          SDL_Event nextEvent;
+          if (SDL_PeepEvents(&nextEvent, 1, SDL_PEEKEVENT, SDL_FIRSTEVENT, SDL_LASTEVENT) > 0) {
+            if (nextEvent.type == SDL_MOUSEMOTION) {
+              continue; 
+            }
+          }
+        }
+
         Input::handleEvent(L, event, root);
 
         if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
@@ -355,9 +364,9 @@ int main(int argc, char* argv[]) {
       StateManager::instance().clearDirty();
     }
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ CURSOR BLINKING ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+    // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+    // ╏ CURSOR BLINKING ╏
+    // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
 
     bool currentCursorState = ((currentTime - Input::lastInputTime) % 1000) < 500;
 

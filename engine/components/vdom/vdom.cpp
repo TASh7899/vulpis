@@ -16,7 +16,7 @@ namespace VDOM {
 
 
   bool operator!=(const Length& a, const Length& b) {
-    return a.value != b.value || a.type != b.type;
+    return a.value != b.value || a.type != b.type || a.isSet != b.isSet; 
   }
 
   bool operator!=(const SDL_Color& a, const SDL_Color b) {
@@ -101,6 +101,8 @@ namespace VDOM {
         n->text = newText;
         n->makeLayoutDirty();
         n->hasCachedCommands = false;
+        n->codepoints = Font::DecodeUTF8(newText);
+
       }
     }
     lua_pop(L, 1);

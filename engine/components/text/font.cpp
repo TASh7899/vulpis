@@ -270,7 +270,9 @@ const Character* Font::LoadGlyph(uint32_t c) {
       strength = -48;
     }
     if (strength != 0) {
+      face->glyph->advance.x += strength;
       FT_Outline_Embolden(&face->glyph->outline, strength);
+
     }
   }
 

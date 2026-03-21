@@ -45,6 +45,7 @@ class Font {
     unsigned int GetAscent() const { return ascent; }
 
     int GetStyle() const { return styleFlags; }
+
     const std::string& GetPath() const { return fontPath; }
     unsigned int GetSize() const { return fontSize; }
 
