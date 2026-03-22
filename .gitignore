@@ -12,6 +12,8 @@ config/*
 !assets/.gitkeep
 !config/.gitkeep
 
+vulpis_research_data.csv
+
 src/*
 !src/.gitkeep
 

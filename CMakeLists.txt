@@ -47,6 +47,7 @@ add_executable(vulpis
   engine/configLogic/font/font_registry.cpp
   engine/configLogic/engineConf/engine_config.cpp
   engine/configLogic/images/texture_registry.cpp
+  engine/tools/stats_logger/stats_logger.cpp
 )
 
 target_link_libraries(vulpis PRIVATE

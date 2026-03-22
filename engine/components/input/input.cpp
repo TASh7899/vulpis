@@ -12,7 +12,7 @@
 #include <iterator>
 #include <lauxlib.h>
 #include <lua.h>
-#include <pstl/glue_algorithm_defs.h>
+#include <algorithm>
 #include <pthread.h>
 #include <sys/types.h>
 #include <vector>

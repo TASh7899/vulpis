@@ -14,11 +14,12 @@ const EngineConfig& GetEngineConfig() {
 
 void loadEngineConfig(lua_State *L) {
   namespace fs = std::filesystem;
-  fs::path configPath = Vulpis::getExecutableDir().parent_path() / "config" / "VP_ENGINE_CONFIG.lua";
+  fs::path configPath = fs::path(Vulpis::getProjectRoot()) / "config" / "VP_ENGINE_CONFIG.lua";
 
   g_config = EngineConfig();
 
   if (!fs::exists(configPath)) {
+    std::cout << "Info: Engine Config file not found at " << configPath << ". Using defaults.\n";
     return;
   }
 
@@ -35,5 +36,13 @@ void loadEngineConfig(lua_State *L) {
     g_config.enableDefaultFonts = lua_toboolean(L, -1);
   }
   lua_pop(L, 1);
+
+  lua_getglobal(L, "enable_stats_logging");
+  if (lua_isboolean(L, -1)) {
+    g_config.enableStatsLogging = lua_toboolean(L, -1);
+  }
+  lua_pop(L, 1);
+
   lua_settop(L, top);
+
 }

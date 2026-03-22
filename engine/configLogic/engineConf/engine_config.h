@@ -4,6 +4,7 @@
 
 struct EngineConfig {
   bool enableDefaultFonts = true;
+  bool enableStatsLogging = false;
 };
 
 const EngineConfig& GetEngineConfig();

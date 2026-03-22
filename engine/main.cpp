@@ -12,6 +12,7 @@
 #include <iterator>
 #include <ostream>
 #include <string>
+#include <memory>
 
 #include "components/renderer/commands.h"
 #include "components/renderer/opengl_renderer.h"
@@ -25,6 +26,9 @@
 #include "./scripting/regsitry.h"
 #include "./configLogic/images/texture_registry.h"
 #include "./components/system/pathUtils.h"
+#include "./configLogic/engineConf/engine_config.h"
+
+#include "tools/stats_logger/stats_logger.h"
 
 int protected_buildNode(lua_State* L) {
   Node* root = buildNode(L, 1);
@@ -260,6 +264,15 @@ int main(int argc, char* argv[]) {
   // ╏ INITIALIZED TIME ╏
   // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   Uint32 lastTime = SDL_GetTicks();
+  Uint32 appStartTime = lastTime;
+  double perfFreq = (double)SDL_GetPerformanceFrequency();
+
+  std::unique_ptr<Vulpis::Tools::StatsLogger> statsLogger = nullptr;
+  if (GetEngineConfig().enableStatsLogging) {
+      statsLogger = std::make_unique<Vulpis::Tools::StatsLogger>(basePath + "vulpis_research_data.csv");
+  }
+  
+
 
   //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
   //          ╏                    MAIN PROGRAM LOOP                    ╏
@@ -380,17 +393,27 @@ int main(int argc, char* argv[]) {
     }
     if (needsRedraw) {
 
+      double currentLayoutTimeMs = 0.0;
+      double currentRenderTimeMs = 0.0;
+
       if (root->isLayoutDirty || root->isPaintDirty) {
         g_damageTracker.damageAll();
       }
 
       if (root->isLayoutDirty) {
+        Uint64 layoutStart = SDL_GetPerformanceCounter();
+
         solver->solve(root, {winW, winH});
         updateTextLayout(root);
         root->isLayoutDirty = false;
         root->invalidateSubtreePaint();
         g_damageTracker.damageAll();
+
+        Uint64 layoutEnd = SDL_GetPerformanceCounter();
+        currentLayoutTimeMs = ((layoutEnd - layoutStart) * 1000.0) / perfFreq;
       }
+
+      Uint64 renderStart = SDL_GetPerformanceCounter();
 
       renderer.beginFrame(g_damageTracker);
       RenderCommandList cmdList;
@@ -415,11 +438,18 @@ int main(int argc, char* argv[]) {
       renderer.submit(cmdList);
       renderer.endFrame();
 
+      Uint64 renderEnd = SDL_GetPerformanceCounter();
+      currentRenderTimeMs = ((renderEnd - renderStart) * 1000.0) / perfFreq;
+
       g_damageTracker.update();
 
       if (!g_damageTracker.active) {
         needsRedraw = false;
       }
+      if (statsLogger) {
+          statsLogger->log(currentTime - appStartTime, dt, currentLayoutTimeMs, currentRenderTimeMs);
+      }
+
     }
   }
 
