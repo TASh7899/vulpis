@@ -28,6 +28,9 @@ struct DrawTextCommand {
 struct DrawRectCommand {
   Rect rect;
   Color color;
+  float borderRadius = 0.0f;
+  float borderWidth = 0.0f;
+  Color borderColor = {0, 0, 0, 0};
 };
 
 struct PushClipCommand {

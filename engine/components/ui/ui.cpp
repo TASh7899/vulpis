@@ -433,6 +433,24 @@ Node* buildNode(lua_State* L, int idx) {
   n->marginLeft   = getInt("marginLeft", m);
   n->marginRight  = getInt("marginRight", m);
 
+
+  n->borderRadius = getFloat("borderRadius", 0.0f);
+    n->borderWidth = getFloat("borderWidth", 0.0f);
+
+    if (hasStyle) {
+      lua_getfield(L, -1, "borderColor");
+      if (lua_isstring(L, -1)) {
+        n->borderColor = parseHexColor(lua_tostring(L, -1));
+      } else if (lua_istable(L, -1)) {
+        lua_rawgeti(L, -1, 1); n->borderColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 2); n->borderColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 3); n->borderColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 4); n->borderColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      }
+      lua_pop(L, 1);
+    }
+
+
   n->minHeight = getInt("minHeight", 0);
   n->maxHeight = getInt("maxHeight", 99999);
   n->minWidth = getInt("minWidth", 0);
@@ -732,11 +750,20 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
 
 
-  if (n->hasBackground) {
+  if (n->hasBackground || n->borderWidth > 0.0f) {
+    Color bgColor = n->hasBackground ? 
+      Color{n->color.r, n->color.g, n->color.b, (uint8_t)(n->color.a * alphaMultiplier)} : 
+      Color{0, 0, 0, 0};
+
+    Color bColor = {n->borderColor.r, n->borderColor.g, n->borderColor.b, (uint8_t)(n->borderColor.a * alphaMultiplier)};
+
     list.push(DrawRectCommand{
-        {renderX, renderY, n->w, n->h},
-        {n->color.r, n->color.g, n->color.b, (uint8_t)(n->color.a * alphaMultiplier)}
-        });
+          {renderX, renderY, n->w, n->h},
+          bgColor,
+          n->borderRadius,
+          n->borderWidth,
+          bColor
+      });
   }
 
   if (n->bgTextureId != 0) {
@@ -856,14 +883,14 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
       int selMin = -1, selMax = -1;
       if (n->selectionStart >= 0 && n->selectionEnd >= 0 && n->selectionStart != n->selectionEnd) {
-          selMin = std::min(n->selectionStart, n->selectionEnd);
-          selMax = std::max(n->selectionStart, n->selectionEnd);
+        selMin = std::min(n->selectionStart, n->selectionEnd);
+        selMax = std::max(n->selectionStart, n->selectionEnd);
       }
 
       for (size_t lineIdx = 0; lineIdx < n->computedLines.size(); ++lineIdx) {
         const TextLine& line = n->computedLines[lineIdx];
         float lineXOffset = 0;
-        
+
         if (n->wordWrap) {
           if (n->textAlign == TextAlign::Center)  lineXOffset = (contentWidth - line.width) / 2.0f;
           else if (n->textAlign == TextAlign::Right) lineXOffset = contentWidth - line.width;
@@ -873,84 +900,84 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
         // 1. DRAW MULTILINE SELECTION HIGHLIGHTS
         if (selMin >= 0) {
-            if (selMin < (int)lineEndIdx && selMax > (int)line.startIndex) {
-                uint32_t localStart = std::max((uint32_t)0, selMin > (int)line.startIndex ? selMin - line.startIndex : 0);
-                uint32_t localEnd = std::min(line.count, (uint32_t)(selMax - line.startIndex));
+          if (selMin < (int)lineEndIdx && selMax > (int)line.startIndex) {
+            uint32_t localStart = std::max((uint32_t)0, selMin > (int)line.startIndex ? selMin - line.startIndex : 0);
+            uint32_t localEnd = std::min(line.count, (uint32_t)(selMax - line.startIndex));
 
-                float selOffsetX = 0;
-                float selWidth = 0;
-                for (uint32_t i = 0; i < line.count; i++) {
-                    float adv = font->GetLogicalAdvance(codepoints[line.startIndex + i]);
-                    if (i < localStart) selOffsetX += adv;
-                    else if (i < localEnd) selWidth += adv;
-                }
-
-                list.push(DrawRectCommand{
-                    {startX + lineXOffset + selOffsetX, cursorY - font->GetLogicalAscent(), selWidth, n->computedLineHeight},
-                    {59, 130, 246, 128} // Blue highlight
-                });
+            float selOffsetX = 0;
+            float selWidth = 0;
+            for (uint32_t i = 0; i < line.count; i++) {
+              float adv = font->GetLogicalAdvance(codepoints[line.startIndex + i]);
+              if (i < localStart) selOffsetX += adv;
+              else if (i < localEnd) selWidth += adv;
             }
+
+            list.push(DrawRectCommand{
+                {startX + lineXOffset + selOffsetX, cursorY - font->GetLogicalAscent(), selWidth, n->computedLineHeight},
+                {59, 130, 246, 128} // Blue highlight
+                });
+          }
         }
 
         // 2. DRAW BLINKING CURSOR & HANDLE 2D AUTO-SCROLLING
         if (n->cursorPosition >= 0 && n->cursorPosition >= (int)line.startIndex && n->cursorPosition <= (int)lineEndIdx) {
-            // Prevent drawing the cursor twice if it's at the boundary between two lines
-            bool isLastLine = (lineIdx == n->computedLines.size() - 1);
-            if (n->cursorPosition < (int)lineEndIdx || isLastLine || codepoints[n->cursorPosition-1] == '\n') {
-                float cursorOffsetX = 0;
-                uint32_t localCursor = n->cursorPosition - line.startIndex;
-                for (uint32_t i = 0; i < localCursor; i++) {
-                    cursorOffsetX += font->GetLogicalAdvance(codepoints[line.startIndex + i]);
-                }
-                
-                if (n->cursorPosition != n->lastCursorPosition) {
+          // Prevent drawing the cursor twice if it's at the boundary between two lines
+          bool isLastLine = (lineIdx == n->computedLines.size() - 1);
+          if (n->cursorPosition < (int)lineEndIdx || isLastLine || codepoints[n->cursorPosition-1] == '\n') {
+            float cursorOffsetX = 0;
+            uint32_t localCursor = n->cursorPosition - line.startIndex;
+            for (uint32_t i = 0; i < localCursor; i++) {
+              cursorOffsetX += font->GetLogicalAdvance(codepoints[line.startIndex + i]);
+            }
 
-                Node* scroller = n;
-                while (scroller && !scroller->overflowScroll) {
-                  scroller = scroller->parent;
-                }
+            if (n->cursorPosition != n->lastCursorPosition) {
 
-                if (scroller) {
-                  float sContentW = scroller->w - scroller->paddingLeft - scroller->paddingRight;
-                  float sContentH = scroller->h - scroller->paddingTop - scroller->paddingBottom;
-
-
-                  // Horizontal Auto-Scroll mapped to the parent
-                  float absoluteCursorX = (n->x - scroller->x - scroller->paddingLeft) + n->paddingLeft + lineXOffset + cursorOffsetX;
-                  if (absoluteCursorX < scroller->targetScrollX) {
-                    scroller->targetScrollX = absoluteCursorX;
-                  } else if (absoluteCursorX > scroller->targetScrollX + sContentW) {
-                    scroller->targetScrollX = absoluteCursorX - sContentW + 1.0f;
-                  }
-                  if (scroller->targetScrollX < 0) scroller->targetScrollX = 0;
-
-                  // Vertical Auto-Scroll mapped to absolute layout coordinates
-                  float absoluteCursorY = (n->y - scroller->y - scroller->paddingTop) + n->paddingTop + (lineIdx * n->computedLineHeight);
-                  if (absoluteCursorY < scroller->targetScrollY) {
-                    scroller->targetScrollY = absoluteCursorY; // Push view up
-                  } else if (absoluteCursorY + n->computedLineHeight > scroller->targetScrollY + sContentH) {
-                    scroller->targetScrollY = absoluteCursorY + n->computedLineHeight - sContentH; // Push view down
-                  }
-                }
-                n->lastCursorPosition = n->cursorPosition;
+              Node* scroller = n;
+              while (scroller && !scroller->overflowScroll) {
+                scroller = scroller->parent;
               }
 
+              if (scroller) {
+                float sContentW = scroller->w - scroller->paddingLeft - scroller->paddingRight;
+                float sContentH = scroller->h - scroller->paddingTop - scroller->paddingBottom;
 
-                // Draw the actual cursor rect
-                bool showCursor = ((SDL_GetTicks() - Input::lastInputTime) % 1000) < 500;
-                if (showCursor) {
-                    list.push(DrawRectCommand{
-                        {startX + lineXOffset + cursorOffsetX, cursorY - font->GetLogicalAscent(), 1.0f, n->computedLineHeight},
-                        {n->textColor.r, n->textColor.g, n->textColor.b, 255}
-                    });
+
+                // Horizontal Auto-Scroll mapped to the parent
+                float absoluteCursorX = (n->x - scroller->x - scroller->paddingLeft) + n->paddingLeft + lineXOffset + cursorOffsetX;
+                if (absoluteCursorX < scroller->targetScrollX) {
+                  scroller->targetScrollX = absoluteCursorX;
+                } else if (absoluteCursorX > scroller->targetScrollX + sContentW) {
+                  scroller->targetScrollX = absoluteCursorX - sContentW + 1.0f;
                 }
+                if (scroller->targetScrollX < 0) scroller->targetScrollX = 0;
+
+                // Vertical Auto-Scroll mapped to absolute layout coordinates
+                float absoluteCursorY = (n->y - scroller->y - scroller->paddingTop) + n->paddingTop + (lineIdx * n->computedLineHeight);
+                if (absoluteCursorY < scroller->targetScrollY) {
+                  scroller->targetScrollY = absoluteCursorY; // Push view up
+                } else if (absoluteCursorY + n->computedLineHeight > scroller->targetScrollY + sContentH) {
+                  scroller->targetScrollY = absoluteCursorY + n->computedLineHeight - sContentH; // Push view down
+                }
+              }
+              n->lastCursorPosition = n->cursorPosition;
             }
+
+
+            // Draw the actual cursor rect
+            bool showCursor = ((SDL_GetTicks() - Input::lastInputTime) % 1000) < 500;
+            if (showCursor) {
+              list.push(DrawRectCommand{
+                  {startX + lineXOffset + cursorOffsetX, cursorY - font->GetLogicalAscent(), 1.0f, n->computedLineHeight},
+                  {n->textColor.r, n->textColor.g, n->textColor.b, 255}
+                  });
+            }
+          }
         }
 
         // 3. DRAW TEXT LINE
         std::string lineStr = "";
         for (uint32_t i = 0; i < line.count; i++) {
-            appendCP(lineStr, codepoints[line.startIndex + i]);
+          appendCP(lineStr, codepoints[line.startIndex + i]);
         }
 
         Color renderTextColor = {

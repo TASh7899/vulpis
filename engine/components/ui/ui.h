@@ -208,6 +208,11 @@ std::vector<uint32_t> codepoints;
   SDL_Color color = {0,0,0,0};
   bool hasBackground = false;
 
+  // border attributes
+  float borderRadius = 0.0f;
+  float borderWidth = 0.0f;
+  SDL_Color borderColor = {0,0,0,0};
+
   std::string bgImageSrc = "";
   uint32_t bgTextureId = 0;
   std::string bgImageFit = "cover";

@@ -15,39 +15,89 @@ const char* vertexSource = R"(
 layout (location = 0) in vec2 aPos;
 layout (location = 1) in vec3 aTextCoord;
 layout (location = 2) in vec4 aColor;
+layout (location = 3) in vec2 aLocalPos;
+layout (location = 4) in vec4 aBoxData;
+layout (location = 5) in vec4 aBorderColor;
+layout (location = 6) in float aType;
 
 out vec4 fColor;
 out vec3 fTextCoord;
+out vec2 fLocalPos;
+out vec4 fBoxData;
+out vec4 fBorderColor;
+out float fType;
+
 uniform mat4 projection;
 
 void main() {
   gl_Position = projection * vec4(aPos, 0.0, 1.0);
   fColor = aColor;
   fTextCoord = aTextCoord;
+  fLocalPos = aLocalPos;
+  fBoxData = aBoxData;
+  fBorderColor = aBorderColor;
+  fType = aType;
 }
 )";
 
 const char* fragmentSource = R"(
-  #version 330 core
-  out vec4 FragColor;
-  in vec4 fColor;
-  in vec3 fTextCoord;
+#version 330 core
+out vec4 FragColor;
 
-  uniform sampler2D texSampler;
-  uniform sampler2DArray fontSampler;
-  uniform int useArray;
+in vec4 fColor;
+in vec3 fTextCoord;
+in vec2 fLocalPos;
+in vec4 fBoxData;
+in vec4 fBorderColor;
+in float fType;
 
-  void main() {
-    vec4 texColor;
-    if (useArray == 1) {
-      float mask = texture(fontSampler, fTextCoord).r;
-      mask = pow(max(mask, 0.0), 1.0/2.2);
-      texColor = vec4(1.0, 1.0, 1.0, mask);
-    } else {
-      texColor = texture(texSampler, fTextCoord.xy);
-    }
-    FragColor = fColor * texColor;
+uniform sampler2D texSampler;
+uniform sampler2DArray fontSampler;
+uniform int useArray;
+
+// Signed Distance Field calculation for a rounded box
+float roundedBoxSDF(vec2 p, vec2 b, float r) {
+  vec2 q = abs(p) - b + vec2(r);
+  return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
+}
+
+void main() {
+  if (fType > 0.5) {
+     vec2 halfSize = vec2(fBoxData.x, fBoxData.y) / 2.0;
+     vec2 center = halfSize;
+     
+     // cap radius so it doesn't exceed the box dimensions
+     float radius = min(fBoxData.z, min(halfSize.x, halfSize.y));
+     float borderW = fBoxData.w;
+
+     float dist = roundedBoxSDF(fLocalPos - center, halfSize, radius);
+     float edgeSoftness = max(fwidth(dist), 0.001); // fwidth guarantees smooth anti-aliasing
+
+     float alpha = smoothstep(edgeSoftness, -edgeSoftness, dist);
+     if (alpha < 0.001) discard;
+
+     vec4 finalColor = fColor;
+
+     // mix border and background inwards from the edge
+     if (borderW > 0.0) {
+         float borderDist = dist + borderW;
+         float borderAlpha = smoothstep(edgeSoftness, -edgeSoftness, borderDist);
+         finalColor = mix(fBorderColor, fColor, borderAlpha);
+     }
+     
+     FragColor = finalColor * vec4(1.0, 1.0, 1.0, alpha);
+  } else {
+     vec4 texColor;
+     if (useArray == 1) {
+       float mask = texture(fontSampler, fTextCoord).r;
+       mask = pow(max(mask, 0.0), 1.0/2.2);
+       texColor = vec4(1.0, 1.0, 1.0, mask);
+     } else {
+       texColor = texture(texSampler, fTextCoord.xy);
+     }
+     FragColor = fColor * texColor;
   }
+}
 )";
 
 OpenGLRenderer::OpenGLRenderer(SDL_Window* win) : window(win) {
@@ -124,6 +174,18 @@ void OpenGLRenderer::initBuffers() {
 
   glEnableVertexAttribArray(2); // Color
   glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, color));
+
+  glEnableVertexAttribArray(3); // LocalPos
+  glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, localX));
+
+  glEnableVertexAttribArray(4); // BoxData
+  glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, boxW));
+
+  glEnableVertexAttribArray(5); // BorderColor
+  glVertexAttribPointer(5, 4, GL_UNSIGNED_BYTE, GL_TRUE, sizeof(Vertex), (void*)offsetof(Vertex, borderColor));
+
+  glEnableVertexAttribArray(6); // Type
+  glVertexAttribPointer(6, 1, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, type));
 
 
   glBindVertexArray(0);
@@ -233,15 +295,20 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       float h = snap(data.rect.h);
       Color c = data.color;
 
+      float radius = data.borderRadius;
+      float borderW = data.borderWidth;
+      Color bc = data.borderColor;
+      float type = (radius > 0.0f || borderW > 0.0f) ? 1.0f : 0.0f;
+
       // triangle 1
-      vertices.push_back({x, y, 0.0f, 0.0f, 0.0f, c});
-      vertices.push_back({x + w, y, 0.0f, 0.0f, 0.0f, c});
-      vertices.push_back({x + w, y + h, 0.0f, 0.0f, 0.0f, c});
+      vertices.push_back({x, y, 0.0f, 0.0f, 0.0f, c,     0.0f, 0.0f, w, h, radius, borderW, bc, type});
+      vertices.push_back({x + w, y, 0.0f, 0.0f, 0.0f, c, w,    0.0f, w, h, radius, borderW, bc, type});
+      vertices.push_back({x + w, y + h, 0.0f, 0.0f, 0.0f, c, w, h, w, h, radius, borderW, bc, type});
 
       // triangle 2
-      vertices.push_back({x, y, 0.0f, 0.0f, 0.0f, c});
-      vertices.push_back({x, y + h, 0.0f, 0.0f, 0.0f, c});
-      vertices.push_back({x + w, y + h, 0.0f, 0.0f, 0.0f, c});
+      vertices.push_back({x, y, 0.0f, 0.0f, 0.0f, c,     0.0f, 0.0f, w, h, radius, borderW, bc, type});
+      vertices.push_back({x, y + h, 0.0f, 0.0f, 0.0f, c, 0.0f, h,    w, h, radius, borderW, bc, type});
+      vertices.push_back({x + w, y + h, 0.0f, 0.0f, 0.0f, c, w,    h,    w, h, radius, borderW, bc, type});
     }
 
     else if (std::holds_alternative<DrawTextCommand>(cmd)) {

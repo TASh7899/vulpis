@@ -11,6 +11,15 @@ struct Vertex {
   float x, y;
   float u, v, page;
   Color color;
+
+  float localX = 0.0f;
+  float localY = 0.0f; 
+  float boxW = 0.0f;
+  float boxH = 0.0f;
+  float radius = 0.0f;
+  float borderW = 0.0f;
+  Color borderColor = {0, 0, 0, 0};
+  float type = 0.0f; // 0.0 defaults to Text/Image (Standard)
 };
 
 class OpenGLRenderer : public Renderer {

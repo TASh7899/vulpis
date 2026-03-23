@@ -1,0 +1,7 @@
+CompileFlags:
+  CompilationDatabase: build/release
+
+Index:
+  Background: Build
+  External:
+    File: ~/.cache/clangd/index

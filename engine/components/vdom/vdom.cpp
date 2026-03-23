@@ -332,6 +332,26 @@ namespace VDOM {
       paintChanged = true;
     }
 
+    update(n->borderRadius, getFloatProp(L, "borderRadius", 0.0f), paintChanged);
+    update(n->borderWidth, getFloatProp(L, "borderWidth", 0.0f), paintChanged);
+
+    lua_getfield(L, -1, "borderColor");
+    if (lua_isstring(L, -1)) {
+        SDL_Color newCol = parseHexColor(lua_tostring(L, -1));
+        update(n->borderColor, newCol, paintChanged);
+    } else if (lua_istable(L, -1)) {
+        lua_rawgeti(L, -1, 1); int r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 2); int g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 3); int b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        lua_rawgeti(L, -1, 4); int a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+        SDL_Color newCol = {(Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a};
+        update(n->borderColor, newCol, paintChanged);
+    } else if (lua_isnil(L, -1)) {
+        SDL_Color newCol = {0,0,0,0};
+        update(n->borderColor, newCol, paintChanged);
+    }
+    lua_pop(L, 1);
+
     // comparing % w and h 
     update(n->widthStyle, getLength(L, "w"), layoutChanged);
     update(n->heightStyle, getLength(L, "h"), layoutChanged);
