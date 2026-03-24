@@ -26,6 +26,7 @@ find_package(Lua REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(Freetype REQUIRED) 
 find_package(yoga CONFIG REQUIRED)
+find_package(cpr CONFIG REQUIRED)
 
 # 3. Manual GLAD (internal)
 add_library(glad STATIC third_party/glad/src/glad.c)
@@ -44,6 +45,7 @@ add_executable(vulpis
   engine/components/renderer/opengl_renderer.cpp
   engine/components/text/font.cpp
   engine/components/system/pathUtils.cpp
+  engine/components/network/http_client.cpp
   engine/configLogic/font/font_registry.cpp
   engine/configLogic/engineConf/engine_config.cpp
   engine/configLogic/images/texture_registry.cpp
@@ -53,13 +55,12 @@ add_executable(vulpis
 target_link_libraries(vulpis PRIVATE
   $<TARGET_NAME_IF_EXISTS:SDL2::SDL2main>
   $<IF:$<TARGET_EXISTS:SDL2::SDL2>,SDL2::SDL2,SDL2::SDL2-static>
-  
   yoga::yogacore
-  
   ${LUA_LIBRARIES}
   OpenGL::GL
   glad
   Freetype::Freetype
+  cpr::cpr
   ${CMAKE_DL_LIBS}
 )
 

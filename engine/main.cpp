@@ -14,6 +14,7 @@
 #include <string>
 #include <memory>
 
+#include "components/network/http_client.h"
 #include "components/renderer/commands.h"
 #include "components/renderer/opengl_renderer.h"
 #include "components/text/font.h"
@@ -283,12 +284,15 @@ int main(int argc, char* argv[]) {
   bool needsRedraw = true;
   uint32_t lastCursorToggle = SDL_GetTicks();
 
+  HttpClient::Init();
 
   while (running) {
 
     Uint32 currentTime = SDL_GetTicks();
     float dt = (currentTime - lastTime) / 1000.0f;
     lastTime = currentTime;
+
+    HttpClient::ProcessQueue(L);
 
     if (TextureRegistry::ProcessUploads()) {
       needsRedraw = true;
@@ -455,6 +459,7 @@ int main(int argc, char* argv[]) {
 
   UI_ShutdownFonts();
   TextureRegistry::Cleanup();
+  HttpClient::ShutDown();
   freeTree(L, root);
   SDL_DestroyWindow(window);
   SDL_Quit();

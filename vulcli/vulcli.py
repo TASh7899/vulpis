@@ -60,8 +60,6 @@ def clean(root_dir):
         print("--- Directory already clean ---")
 
 
-import shutil
-
 def update_compile_db(root_dir, is_release):
     build_folder = os.path.join("build", "release" if is_release else "debug")
 
@@ -84,13 +82,18 @@ def update_compile_db(root_dir, is_release):
 
 def build(root_dir, is_release=False):
     system_os = platform.system()
+    machine_arch = platform.machine().lower()
     
-    # 1. Select the correct preset prefix based on the OS
+    # 1. Select the correct preset prefix based on the OS and Architecture
     os_prefix = "linux"
     if system_os == "Windows":
         os_prefix = "windows"
     elif system_os == "Darwin":
-        os_prefix = "mac"
+        # Check for Apple Silicon (ARM)
+        if machine_arch == "arm64" or machine_arch == "aarch64":
+            os_prefix = "mac-arm64"
+        else:
+            os_prefix = "mac"
         
     preset_name = f"{os_prefix}-{'release' if is_release else 'default'}"
     build_folder = os.path.join("build", "release" if is_release else "debug")
@@ -100,7 +103,7 @@ def build(root_dir, is_release=False):
 
     check_vcpkg(root_dir)
 
-    print(f"--- Detected {system_os}, using preset: {preset_name} ---")
+    print(f"--- Detected {system_os} ({machine_arch}), using preset: {preset_name} ---")
 
     # 2. AUTOMATION: Load MSVC Environment if on Windows and compiler is missing
     if system_os == "Windows" and shutil.which("cl") is None:
@@ -216,6 +219,3 @@ if __name__ == "__main__":
         check_vcpkg(project_root)
     else:
         print(f"Unknown command: {cmd}")
-
-
-
