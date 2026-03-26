@@ -13,5 +13,6 @@ namespace Vulpis {
     std::string getAssetPath(const std::string& relativePath);
     fs::path getExecutableDir();
     std::string getProjectRoot();
+    std::filesystem::path getCacheDirectory();
 }
 

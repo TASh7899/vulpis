@@ -49,6 +49,10 @@ struct DrawImageCommand {
   float vMin = 0.0f;
   float uMax = 1.0f;
   float vMax = 1.0f;
+  
+  float borderRadius = 0.0f; 
+  Rect nodeRect = {0, 0, 0, 0};
+
 };
 
 using RenderCommand = std::variant<DrawRectCommand, PushClipCommand, PopClipCommand, DrawTextCommand, DrawImageCommand>;

@@ -165,6 +165,7 @@ function elements.Button(props)
 		BGColor = "#FFAC1C",
 		alignItems = "center",
 		justifyContent = "center",
+		borderRadius = 10,
 
 		-- Default text styles
 		color = "#000000",

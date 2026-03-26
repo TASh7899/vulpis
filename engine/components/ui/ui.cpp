@@ -704,8 +704,6 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     totalOffsetX += n->dragOffsetX;
     totalOffsetY += n->dragOffsetY;
   }
-
-
   // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
   // ╏ IF CLEAN, DUMP CACHE AND RETURN INSTANTLY ╏
   // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
@@ -721,18 +719,14 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
       n->cachedOffsetX = totalOffsetX;
       n->cachedOffsetY = totalOffsetY;
     }
-
     for (const auto& cmd : n->cachedCommands.commands) {
       list.push(cmd);
     }
     return;
   }
-
-
   float currentAlpha = parentAlpha * n->opacity;
   bool treatAsDragged = isInsideDraggedNode || (n->isDragging && n->isDraggable);
   float alphaMultiplier = (isDragPass && treatAsDragged) ? (currentAlpha * 0.7f) : currentAlpha;
-
 
   if (isDragPass && !treatAsDragged) {
     for (Node* c : n->children) {
@@ -740,16 +734,12 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     }
     return;
   }
-
   size_t startIndex = list.commands.size();
-
   // Accumulate offsets
-
   float renderX = n->x + totalOffsetX;
   float renderY = n->y + totalOffsetY;
 
-
-
+  // BASE BACKGROUND
   if (n->hasBackground || n->borderWidth > 0.0f) {
     Color bgColor = n->hasBackground ? 
       Color{n->color.r, n->color.g, n->color.b, (uint8_t)(n->color.a * alphaMultiplier)} : 
@@ -758,56 +748,73 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     Color bColor = {n->borderColor.r, n->borderColor.g, n->borderColor.b, (uint8_t)(n->borderColor.a * alphaMultiplier)};
 
     list.push(DrawRectCommand{
-          {renderX, renderY, n->w, n->h},
-          bgColor,
-          n->borderRadius,
-          n->borderWidth,
-          bColor
-      });
+        {renderX, renderY, n->w, n->h},
+        bgColor,
+        n->borderRadius,
+        0.0f,
+        {0, 0, 0, 0}
+        });
   }
 
+// BACKGROUND IMAGE OR SKELETON LOADER
   if (n->bgTextureId != 0) {
-    float uMin = 0.0f, vMin = 0.0f, uMax = 1.0f, vMax = 1.0f;
-    float drawX = renderX, drawY = renderY, drawW = n->w, drawH = n->h;
+    if (!TextureRegistry::IsTextureLoaded(n->bgTextureId)) {
+      // Draw pulsating skeleton loader
+      float pulse = (std::sin(SDL_GetTicks() / 150.0f) + 1.0f) * 0.5f;
+      uint8_t v = (uint8_t)(10 + pulse * 10);
 
-    int texW = 0, texH = 0;
-    TextureRegistry::GetTextureDimensions(n->bgTextureId, texW, texH);
+      list.push(DrawRectCommand{
+          {renderX, renderY, n->w, n->h},
+          {v, v, v, (uint8_t)(255 * alphaMultiplier)},
+          n->borderRadius,
+          0.0f,
+          {0, 0, 0, 0}
+          });
+    } else {
+      float uMin = 0.0f, vMin = 0.0f, uMax = 1.0f, vMax = 1.0f;
+      float drawX = renderX, drawY = renderY, drawW = n->w, drawH = n->h;
 
-    if (texW > 0 && texH > 0) {
-      float imgAspect = (float)texW / (float)texH;
-      float boxAspect = n->w / n->h;
+      int texW = 0, texH = 0;
+      TextureRegistry::GetTextureDimensions(n->bgTextureId, texW, texH);
 
-      if (n->bgImageFit == "cover") {
-        if (imgAspect > boxAspect) {
-          float scaledW = n->h * imgAspect;
-          float crop = (scaledW - n->w) / 2.0f;
-          uMin = crop / scaledW;
-          uMax = 1.0f - uMin;
-        } else {
-          float scaledH = n->w / imgAspect;
-          float crop = (scaledH - n->h) / 2.0f;
-          vMin = crop / scaledH;
-          vMax = 1.0f - vMin;
-        }
-      } else if (n->bgImageFit == "contain") {
-        if (imgAspect > boxAspect) {
-          drawW = n->w;
-          drawH = n->w / imgAspect;
-          drawY += (n->h - drawH) / 2.0f;
-        } else {
-          drawH = n->h;
-          drawW = n->h * imgAspect;
-          drawX += (n->w - drawW) / 2.0f; 
+      if (texW > 0 && texH > 0) {
+        float imgAspect = (float)texW / (float)texH;
+        float boxAspect = n->w / n->h;
+
+        if (n->bgImageFit == "cover") {
+          if (imgAspect > boxAspect) {
+            float scaledW = n->h * imgAspect;
+            float crop = (scaledW - n->w) / 2.0f;
+            uMin = crop / scaledW;
+            uMax = 1.0f - uMin;
+          } else {
+            float scaledH = n->w / imgAspect;
+            float crop = (scaledH - n->h) / 2.0f;
+            vMin = crop / scaledH;
+            vMax = 1.0f - vMin;
+          }
+        } else if (n->bgImageFit == "contain") {
+          if (imgAspect > boxAspect) {
+            drawW = n->w;
+            drawH = n->w / imgAspect;
+            drawY += (n->h - drawH) / 2.0f;
+          } else {
+            drawH = n->h;
+            drawW = n->h * imgAspect;
+            drawX += (n->w - drawW) / 2.0f; 
+          }
         }
       }
-    }
 
-    list.push(DrawImageCommand{
-        {drawX, drawY, drawW, drawH},
-        n->bgTextureId,
-        {255, 255, 255, (uint8_t)(255 * alphaMultiplier)},
-        uMin, vMin, uMax, vMax
-        });
+      list.push(DrawImageCommand{
+          {drawX, drawY, drawW, drawH},
+          n->bgTextureId,
+          {255, 255, 255, (uint8_t)(255 * alphaMultiplier)},
+          uMin, vMin, uMax, vMax,
+          n->borderRadius,
+          {renderX, renderY, n->w, n->h}
+          });
+    }
   }
 
 
@@ -823,50 +830,89 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   }
 
   if (n->type == "image" && n->textureId != 0) {
-    Color imageTint = {255, 255, 255, (uint8_t)(255 * alphaMultiplier)};
+    if (!TextureRegistry::IsTextureLoaded(n->textureId)) {
+      // Draw pulsating skeleton loader
+      float pulse = (std::sin(SDL_GetTicks() / 150.0f) + 1.0f) * 0.5f;
+      uint8_t v = (uint8_t)(10 + pulse * 10);
 
-    float uMin = 0.0f, vMin = 0.0f, uMax = 1.0f, vMax = 1.0f;
-    float drawX = renderX, drawY = renderY, drawW = n->w, drawH = n->h;
+      list.push(DrawRectCommand{
+          {renderX, renderY, n->w, n->h},
+          {v, v, v, (uint8_t)(255 * alphaMultiplier)},
+          n->borderRadius,
+          0.0f,
+          {0, 0, 0, 0}
+          });
+    } else {
+      Color imageTint = {255, 255, 255, (uint8_t)(255 * alphaMultiplier)};
 
-    int texW = 0, texH = 0;
-    TextureRegistry::GetTextureDimensions(n->textureId, texW, texH);
+      float uMin = 0.0f, vMin = 0.0f, uMax = 1.0f, vMax = 1.0f;
+      float drawX = renderX, drawY = renderY, drawW = n->w, drawH = n->h;
 
-    if (texW > 0 && texH > 0) {
-      float imgAspect = (float)texW / (float)texH;
-      float boxAspect = n->w / n->h;
+      int texW = 0, texH = 0;
+      TextureRegistry::GetTextureDimensions(n->textureId, texW, texH);
 
-      if (n->objectFit == "cover") {
-        if (imgAspect > boxAspect) {
-          float scaledW = n->h * imgAspect;
-          float crop = (scaledW - n->w) / 2.0f;
-          uMin = crop / scaledW;
-          uMax = 1.0f - uMin;
-        } else {
-          float scaledH = n->w / imgAspect;
-          float crop = (scaledH - n->h) / 2.0f;
-          vMin = crop / scaledH;
-          vMax = 1.0f - vMin;
-        }
-      } else if (n->objectFit == "contain") {
-        if (imgAspect > boxAspect) {
-          drawW = n->w;
-          drawH = n->w / imgAspect;
-          drawY += (n->h - drawH) / 2.0f;
-        } else {
-          drawH = n->h;
-          drawW = n->h * imgAspect;
-          drawX += (n->w - drawW) / 2.0f; 
+      if (texW > 0 && texH > 0) {
+        float imgAspect = (float)texW / (float)texH;
+        float boxAspect = n->w / n->h;
+
+        if (n->objectFit == "cover") {
+          if (imgAspect > boxAspect) {
+            float scaledW = n->h * imgAspect;
+            float crop = (scaledW - n->w) / 2.0f;
+            uMin = crop / scaledW;
+            uMax = 1.0f - uMin;
+          } else {
+            float scaledH = n->w / imgAspect;
+            float crop = (scaledH - n->h) / 2.0f;
+            vMin = crop / scaledH;
+            vMax = 1.0f - vMin;
+          }
+        } else if (n->objectFit == "contain") {
+          if (imgAspect > boxAspect) {
+            drawW = n->w;
+            drawH = n->w / imgAspect;
+            drawY += (n->h - drawH) / 2.0f;
+          } else {
+            drawH = n->h;
+            drawW = n->h * imgAspect;
+            drawX += (n->w - drawW) / 2.0f; 
+          }
         }
       }
+
+      list.push(DrawImageCommand{
+          {drawX, drawY, drawW, drawH},
+          n->textureId,
+          imageTint,
+          uMin, vMin, uMax, vMax,
+          n->borderRadius,
+          {renderX, renderY, n->w, n->h}
+          });
     }
+  }
 
-
-    list.push(DrawImageCommand{
-        {drawX, drawY, drawW, drawH},
-        n->textureId,
-        imageTint,
-        uMin, vMin, uMax, vMax
+  // BORDER OVERLAY
+  if (n->borderWidth > 0.0f) {
+    Color bColor = {n->borderColor.r, n->borderColor.g, n->borderColor.b, (uint8_t)(n->borderColor.a * alphaMultiplier)};
+    list.push(DrawRectCommand{
+        {renderX, renderY, n->w, n->h},
+        {0, 0, 0, 0}, // Transparent background so we don't block the image
+        n->borderRadius,
+        n->borderWidth,
+        bColor
         });
+  }
+
+  // CLIP PUSH (Keeps text and children inside the box)
+  applyClip = false;
+  if (n->overflowHidden) {
+    if (!isDragPass || treatAsDragged) {
+      applyClip = true;
+    }
+  }
+
+  if (applyClip) {
+    list.push(PushClipCommand{{renderX, renderY, n->w, n->h}});
   }
 
 
@@ -1250,6 +1296,32 @@ void updateTextLayout(Node* root) {
 
 void UI_UpdateSmoothScrolling(Node *n, float dt) {
   if (!n) return;
+
+  if (n->bgTextureId != 0 && !TextureRegistry::IsValidTexture(n->bgTextureId)) {
+    n->bgTextureId = TextureRegistry::GetTexture(n->bgImageSrc);
+    n->makePaintDirty();
+  }
+  if (n->type == "image" && n->textureId != 0 && !TextureRegistry::IsValidTexture(n->textureId)) {
+    n->textureId = TextureRegistry::GetTexture(n->src);
+    n->makePaintDirty();
+  }
+
+  bool isLoading = false;
+  if (n->type == "image" && n->textureId != 0 && !TextureRegistry::IsTextureLoaded(n->textureId)) {
+    isLoading = true;
+  }
+
+  if (n->bgTextureId != 0 && !TextureRegistry::IsTextureLoaded(n->bgTextureId)) {
+    isLoading = true;
+  }
+
+  if (isLoading) {
+    n->makePaintDirty();
+  }
+
+  if (isLoading) {
+    n->makePaintDirty();
+  }
 
   if (n->overflowScroll) {
 

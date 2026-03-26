@@ -1,6 +1,7 @@
 #include "pathUtils.h"
 #include <SDL2/SDL_filesystem.h>
 #include <SDL2/SDL_stdinc.h>
+#include <filesystem>
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -79,6 +80,55 @@ namespace Vulpis {
     std::filesystem::path root(getProjectRoot());
     return (root / "assets" / relativePath).string();
   }
+
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ GET CACHE DIR FOR THE CURRENT OS ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+
+  std::filesystem::path getCacheDirectory() {
+    std::filesystem::path cacheDir;
+    std::string appName = "Vulpis";
+#if defined(_WIN32)
+        // Windows: C:\Users\<User>\AppData\Local\Vulpis\Cache
+        const char* localAppData = std::getenv("LOCALAPPDATA");
+        if (localAppData) {
+            cacheDir = std::filesystem::path(localAppData) / appName / "Cache";
+        } else {
+            cacheDir = std::filesystem::current_path() / ".vulpis_cache"; 
+        }
+
+#elif defined(__APPLE__)
+        // macOS: /Users/<User>/Library/Caches/Vulpis
+        const char* home = std::getenv("HOME");
+        if (home) {
+            cacheDir = std::filesystem::path(home) / "Library" / "Caches" / appName;
+        } else {
+            cacheDir = std::filesystem::current_path() / ".vulpis_cache";
+        }
+
+#elif defined(__linux__)
+        // Linux: Respect XDG_CACHE_HOME first, fallback to ~/.cache/Vulpis
+        const char* xdgCache = std::getenv("XDG_CACHE_HOME");
+        if (xdgCache && std::string(xdgCache).length() > 0) {
+            cacheDir = std::filesystem::path(xdgCache) / appName;
+        } else {
+            const char* home = std::getenv("HOME");
+            if (home) {
+                cacheDir = std::filesystem::path(home) / ".cache" / appName;
+            } else {
+                cacheDir = std::filesystem::current_path() / ".vulpis_cache"; 
+            }
+        }
+#else
+        // Ultimate Fallback
+        cacheDir = std::filesystem::current_path() / ".vulpis_cache";
+#endif
+        std::filesystem::create_directories(cacheDir);
+        return cacheDir;
+  }
+
+
 }
 
 

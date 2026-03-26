@@ -44,6 +44,7 @@ int protected_reconcile(lua_State* L) {
 }
 
 int main(int argc, char* argv[]) {
+  SDL_SetHint(SDL_HINT_VIDEODRIVER, "wayland,x11");
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     std::cout << "SDL Init Failed: " << SDL_GetError() << std::endl;
     return 1;
@@ -61,7 +62,6 @@ int main(int argc, char* argv[]) {
   int winH = 600;
 
   SDL_Window* window = nullptr;
-
   // initializing lua
   lua_State* L = luaL_newstate();
   luaL_openlibs(L);
@@ -319,11 +319,40 @@ int main(int argc, char* argv[]) {
 
         Input::handleEvent(L, event, root);
 
-        if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_RESIZED) {
+        if (event.type == SDL_WINDOWEVENT && (event.window.event == SDL_WINDOWEVENT_RESIZED || event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)) {
           winW = event.window.data1;
           winH = event.window.data2;
           g_damageTracker.damageAll();
           root->makeLayoutDirty();
+
+          static uint32_t lastResizeRender = 0;
+          uint32_t currentTicks = SDL_GetTicks();
+          if (currentTicks - lastResizeRender > 16) { 
+            solver->solve(root, {winW, winH});
+            updateTextLayout(root);
+            root->isLayoutDirty = false;
+            root->invalidateSubtreePaint();
+
+            renderer.beginFrame(g_damageTracker);
+            RenderCommandList cmdList;
+            generateRenderCommands(root, cmdList);
+            UI_SetRenderCommandList(&cmdList);
+
+            lua_getglobal(L, "on_render");
+            if (lua_isfunction(L, -1)) {
+              if (lua_pcall(L, 0, 0, 0) != LUA_OK) {
+                lua_pop(L, 1);
+              }
+            } else {
+              lua_pop(L, 1);
+            }
+            UI_SetRenderCommandList(nullptr);
+
+            renderer.submit(cmdList);
+            renderer.endFrame();
+
+            lastResizeRender = currentTicks; 
+          }
         }
       } while (SDL_PollEvent(&event));
     }
@@ -451,7 +480,7 @@ int main(int argc, char* argv[]) {
         needsRedraw = false;
       }
       if (statsLogger) {
-          statsLogger->log(currentTime - appStartTime, dt, currentLayoutTimeMs, currentRenderTimeMs);
+        statsLogger->log(currentTime - appStartTime, dt, currentLayoutTimeMs, currentRenderTimeMs);
       }
 
     }

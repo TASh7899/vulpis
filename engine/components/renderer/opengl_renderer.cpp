@@ -95,7 +95,18 @@ void main() {
      } else {
        texColor = texture(texSampler, fTextCoord.xy);
      }
-     FragColor = fColor * texColor;
+    float alpha = 1.0;
+     if (fBoxData.z > 0.0 && useArray == 0) {
+         vec2 halfSize = vec2(fBoxData.x, fBoxData.y) / 2.0;
+         vec2 center = halfSize;
+         float radius = min(fBoxData.z, min(halfSize.x, halfSize.y));
+         float dist = roundedBoxSDF(fLocalPos - center, halfSize, radius);
+         float edgeSoftness = max(fwidth(dist), 0.001);
+         alpha = smoothstep(edgeSoftness, -edgeSoftness, dist);
+         if (alpha < 0.001) discard;
+     }
+
+      FragColor = fColor * texColor * vec4(1.0, 1.0, 1.0, alpha);
   }
 }
 )";
@@ -216,7 +227,7 @@ void OpenGLRenderer::beginFrame(const DamageRect& damage) {
   } else {
     glDisable(GL_SCISSOR_TEST);
   }
-  
+
   glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -485,13 +496,23 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       float right  = snap(data.rect.x + data.rect.w);
       float bottom = snap(data.rect.y + data.rect.h);
 
-      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint});
-      vertices.push_back({right, top, data.uMax, data.vMin, 0.0f, data.tint});
-      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint});
+      float localLeft = data.rect.x - data.nodeRect.x;
+      float localTop = data.rect.y - data.nodeRect.y;
+      float localRight = localLeft + data.rect.w;
+      float localBottom = localTop + data.rect.h;
 
-      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint});
-      vertices.push_back({left, bottom, data.uMin, data.vMax, 0.0f, data.tint});
-      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint});
+      float boxW = data.nodeRect.w;
+      float boxH = data.nodeRect.h;
+      float radius = data.borderRadius;
+
+      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint, localLeft, localTop, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
+      vertices.push_back({right, top, data.uMax, data.vMin, 0.0f, data.tint, localRight, localTop, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint, localRight, localBottom, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
+
+      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint, localLeft, localTop, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
+      vertices.push_back({left, bottom, data.uMin, data.vMax, 0.0f, data.tint, localLeft, localBottom, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint, localRight, localBottom, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
+
     }
 
   }
