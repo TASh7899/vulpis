@@ -333,7 +333,7 @@ namespace TextureRegistry {
         glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
 
         if (task.pbo != 0) {
-          glBindTexture(GL_PIXEL_UNPACK_BUFFER, task.pbo);
+          glBindBuffer(GL_PIXEL_UNPACK_BUFFER, task.pbo);
           glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
           int paddedW = ((task.width + 3) / 4) * 4;
           int paddedH = ((task.height + 3) / 4) * 4;

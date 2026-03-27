@@ -92,6 +92,12 @@ struct DamageRect {
 
 extern DamageRect g_damageTracker;
 
+enum class FlexWrap {
+  NoWrap,
+  Wrap,
+  WrapReverse
+};
+
 struct Node {
   std::string type;
   std::string key;
@@ -199,6 +205,7 @@ std::vector<uint32_t> codepoints;
   bool hasRight = false; float rightVal = 0.0f;
   bool hasBottom = false; float bottomVal = 0.0f;
 
+  FlexWrap flexWrap = FlexWrap::NoWrap;
 
   float scrollbarOpacity = 0.0f;
   float scrollbarTimer = 0.0f;
@@ -301,12 +308,13 @@ extern RenderCommandList* activeCommandList;
 
 void UI_InitTypes(lua_State *L);
 
-
 FontStyle parseFontStyle(const std::string& s);
 FontWeight parseFontWeight(const std::string& s);
 TextDecoration parseTextDecoration(const std::string& s);
-std::string getVariantKey(FontWeight w, FontStyle s);
+FlexWrap parseFlexWrap(std::string s);
 void parseEvents(lua_State* L, Node* n, int idx);
+
+std::string getVariantKey(FontWeight w, FontStyle s);
 int getFlags(Node* node);
 void UI_UpdateSmoothScrolling(Node* n, float dt);
 

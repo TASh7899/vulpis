@@ -387,6 +387,8 @@ namespace VDOM {
     update(n->alignItems, parseAlign(getStringProp(L, "alignItems", "start")), layoutChanged);
     update(n->textAlign, parseTextAlign(getStringProp(L, "textAlign", "left")), layoutChanged);
 
+    update(n->flexWrap, ::parseFlexWrap(getStringProp(L, "flexWrap", "nowrap")), layoutChanged);
+
     update(n->justifyContent, parseJustify(getStringProp(L, "justifyContent", "start")), layoutChanged);
     update(n->position, parsePosition(getStringProp(L, "position", "relative")), layoutChanged);
     // we have support for both gap and spacing
@@ -417,9 +419,11 @@ namespace VDOM {
 
     std::string overflow = getStringProp(L, "overflow", "visible");
     bool newOverflowHidden = (overflow != "visible");
+    bool newOverflowScroll = (overflow == "scroll" || overflow == "auto");
 
-    if (n->overflowHidden != newOverflowHidden) {
+    if (n->overflowHidden != newOverflowHidden || n->overflowScroll != newOverflowScroll) {
       n->overflowHidden = newOverflowHidden;
+      n->overflowScroll = newOverflowScroll;
       n->makePaintDirty();
     }
 
@@ -486,10 +490,10 @@ namespace VDOM {
 
     lua_getfield(L, idx, "draggable");
     if (!lua_isnil(L, -1)) {
-        bool newDraggable = lua_toboolean(L, -1);
-        if (n->isDraggable != newDraggable) {
-            n->isDraggable = newDraggable;
-        }
+      bool newDraggable = lua_toboolean(L, -1);
+      if (n->isDraggable != newDraggable) {
+        n->isDraggable = newDraggable;
+      }
     } else {
       n->isDraggable = false;
     }

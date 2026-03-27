@@ -79,6 +79,12 @@ Justify parseJustify(std::string s) {
   return Justify::Start;
 }
 
+FlexWrap parseFlexWrap(std::string s) {
+  if (s == "wrap") return FlexWrap::Wrap;
+  if (s == "wrap-reverse") return FlexWrap::WrapReverse;
+  return FlexWrap::NoWrap;
+}
+
 Length getLength(lua_State* L, const char* key) {
   Length len;
   lua_getfield(L, -1, key);
@@ -458,6 +464,9 @@ Node* buildNode(lua_State* L, int idx) {
 
   n->flexGrow = getFloat("flexGrow", 0.0f);
   n->flexShrink  = getFloat("flexShrink", 0.0f);
+
+  n->flexWrap = parseFlexWrap(getString("flexWrap", "nowrap"));
+
   n->alignItems = parseAlign(getString("alignItems", "start"));
   n->justifyContent = parseJustify(getString("justifyContent", "start"));
   n->textAlign = parseTextAlign(getString("textAlign", "left"));
@@ -578,7 +587,6 @@ void resolveStyles(Node* n, int parentW, int parentH) {
   }
 }
 
-void computeTextLayout(Node* n);
 
 void measure(Node* n) {
   if (n->type == "vbox") {
@@ -686,6 +694,8 @@ void TranslateRenderCommand(RenderCommand& cmd, float dx, float dy) {
     } else if constexpr (std::is_same_v<T, DrawImageCommand>) {
       c.rect.x += dx;
       c.rect.y += dy;
+      c.nodeRect.x += dx;
+      c.nodeRect.y += dy;
     } else if constexpr (std::is_same_v<T, PushClipCommand>) {
       c.rect.x += dx;
       c.rect.y += dy;
@@ -817,7 +827,6 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     }
   }
 
-
   bool applyClip = false;
   if (n->overflowHidden) {
     if (!isDragPass || treatAsDragged) {
@@ -903,19 +912,6 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
         });
   }
 
-  // CLIP PUSH (Keeps text and children inside the box)
-  applyClip = false;
-  if (n->overflowHidden) {
-    if (!isDragPass || treatAsDragged) {
-      applyClip = true;
-    }
-  }
-
-  if (applyClip) {
-    list.push(PushClipCommand{{renderX, renderY, n->w, n->h}});
-  }
-
-
   if (n->type == "text") {
     Font* font = n->font ? n->font : UI_GetFontById(n->fontId);
     if (font) {
@@ -979,7 +975,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
             if (n->cursorPosition != n->lastCursorPosition) {
 
               Node* scroller = n;
-              while (scroller && !scroller->overflowScroll) {
+              while (scroller && !scroller->overflowHidden) {
                 scroller = scroller->parent;
               }
 
@@ -987,23 +983,31 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
                 float sContentW = scroller->w - scroller->paddingLeft - scroller->paddingRight;
                 float sContentH = scroller->h - scroller->paddingTop - scroller->paddingBottom;
 
+                // Keep the cursor a few pixels away from the absolute edge so it's clearly visible
+                float cursorThickness = 1.0f;
+
+                float safePaddingX = std::min(5.0f, std::max(0.0f, (sContentW - cursorThickness) / 2.0f));
+                float safePaddingY = std::min(5.0f, std::max(0.0f, (sContentH - n->computedLineHeight) / 2.0f));
 
                 // Horizontal Auto-Scroll mapped to the parent
                 float absoluteCursorX = (n->x - scroller->x - scroller->paddingLeft) + n->paddingLeft + lineXOffset + cursorOffsetX;
                 if (absoluteCursorX < scroller->targetScrollX) {
-                  scroller->targetScrollX = absoluteCursorX;
-                } else if (absoluteCursorX > scroller->targetScrollX + sContentW) {
-                  scroller->targetScrollX = absoluteCursorX - sContentW + 1.0f;
+                  scroller->targetScrollX = absoluteCursorX - safePaddingX;
+                } else if (absoluteCursorX + cursorThickness > scroller->targetScrollX + sContentW) {
+                  float desiredScrollX = absoluteCursorX + cursorThickness - sContentW + safePaddingX;
+                  scroller->targetScrollX = std::min(desiredScrollX, absoluteCursorX - safePaddingX);
                 }
                 if (scroller->targetScrollX < 0) scroller->targetScrollX = 0;
 
                 // Vertical Auto-Scroll mapped to absolute layout coordinates
                 float absoluteCursorY = (n->y - scroller->y - scroller->paddingTop) + n->paddingTop + (lineIdx * n->computedLineHeight);
                 if (absoluteCursorY < scroller->targetScrollY) {
-                  scroller->targetScrollY = absoluteCursorY; // Push view up
+                  scroller->targetScrollY = absoluteCursorY - safePaddingY; // Push view up
                 } else if (absoluteCursorY + n->computedLineHeight > scroller->targetScrollY + sContentH) {
-                  scroller->targetScrollY = absoluteCursorY + n->computedLineHeight - sContentH; // Push view down
+                  float desiredScrollY = absoluteCursorY + n->computedLineHeight - sContentH + safePaddingY;
+                  scroller->targetScrollY = std::min(desiredScrollY, absoluteCursorY - safePaddingY);
                 }
+                if (scroller->targetScrollY < 0) scroller->targetScrollY = 0;
               }
               n->lastCursorPosition = n->cursorPosition;
             }
@@ -1283,13 +1287,39 @@ void computeTextLayout(Node* n) {
   const auto& codepoints = n->codepoints;
   n->computedLines = n->font->CalculateWordWrap(codepoints, maxWidth);
 
+  float maxLineWidth = 0.0f;
+  for (const auto& line : n->computedLines) {
+    if (line.width > maxLineWidth) maxLineWidth = line.width;
+  }
+  n->contentW = maxLineWidth + n->paddingLeft + n->paddingRight;
+  n->contentH = (n->computedLines.size() * n->computedLineHeight) + n->paddingTop + n->paddingBottom;
+
 }
 
-void updateTextLayout(Node* root) {
-  if (!root) return;
-  computeTextLayout(root);
-  for (Node* c : root->children) {
+void updateTextLayout(Node* n) {
+  if (!n) return;
+
+  float maxChildRight = 0.0f;
+  float maxChildBottom = 0.0f;
+
+  for (Node* c : n->children) {
     updateTextLayout(c);
+
+    float childLocalX = c->x - n->x;
+    float childLocalY = c->y - n->y;
+
+    float childTrueW = std::max(c->w, c->contentW);
+    float childTrueH = std::max(c->h, c->contentH);
+
+    maxChildRight = std::max(maxChildRight, childLocalX + childTrueW);
+    maxChildBottom = std::max(maxChildBottom, childLocalY + childTrueH);
+  }
+
+  if (n->type == "text") {
+    computeTextLayout(n);
+  } else if (!n->children.empty()) {
+    n->contentW = maxChildRight + n->paddingRight;
+    n->contentH = maxChildBottom + n->paddingBottom;
   }
 }
 
@@ -1319,25 +1349,21 @@ void UI_UpdateSmoothScrolling(Node *n, float dt) {
     n->makePaintDirty();
   }
 
-  if (isLoading) {
-    n->makePaintDirty();
-  }
-
-  if (n->overflowScroll) {
-
+  if (n->overflowHidden) {
     float maxScrollY = std::max(0.0f, n->contentH - n->h);
     float maxScrollX = std::max(0.0f, n->contentW - n->w);
-
     n->targetScrollY = std::clamp(n->targetScrollY, 0.0f, maxScrollY);
     n->targetScrollX = std::clamp(n->targetScrollX, 0.0f, maxScrollX);
 
-    if (n->scrollbarTimer > 0.0f) {
-      n->scrollbarTimer -= dt;
-      n->scrollbarOpacity += 8.0f * dt;
-      if (n->scrollbarOpacity > 1.0f) n->scrollbarOpacity = 1.0f;
-    } else {
-      n->scrollbarOpacity -= 2.0f * dt; // Fade out slower
-      if (n->scrollbarOpacity < 0.0f) n->scrollbarOpacity = 0.0f;
+    if (n->overflowScroll) { 
+      if (n->scrollbarTimer > 0.0f) {
+        n->scrollbarTimer -= dt;
+        n->scrollbarOpacity += 8.0f * dt;
+        if (n->scrollbarOpacity > 1.0f) n->scrollbarOpacity = 1.0f;
+      } else {
+        n->scrollbarOpacity -= 2.0f * dt; // Fade out slower
+        if (n->scrollbarOpacity < 0.0f) n->scrollbarOpacity = 0.0f;
+      }
     }
 
     float diffY = n->targetScrollY - n->scrollY;

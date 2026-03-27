@@ -28,7 +28,9 @@ end
 
 -- Core property extractor to prevent duplicating reserved keys
 local function buildBaseNode(props, defaultType)
-	props = props or {}
+	if type(props) ~= "table" then
+		props = {}
+	end
 
 	local node = {
 		type = props.type or defaultType,
@@ -46,27 +48,37 @@ local function buildBaseNode(props, defaultType)
 end
 
 function elements.Box(props)
+	if type(props) ~= "table" then
+		props = {}
+	end
 	return buildBaseNode(props, "hbox")
 end
 
 function elements.VBox(props)
-	props = props or {}
+	if type(props) ~= "table" then
+		props = {}
+	end
 	props.type = "vbox"
 	return buildBaseNode(props, "vbox")
 end
 
 function elements.HBox(props)
-	props = props or {}
+	if type(props) ~= "table" then
+		props = {}
+	end
 	props.type = "hbox"
 	return buildBaseNode(props, "hbox")
 end
 
 function elements.Text(props, optionalStyle, optionalProps)
-	if type(props) == "string" then
-		local textString = props
-		props = optionalProps or {}
+	-- Robustly handle strings and numbers
+	if type(props) == "string" or type(props) == "number" then
+		local textString = tostring(props)
+		props = type(optionalProps) == "table" and optionalProps or {}
 		props.text = textString
-		props.style = optionalStyle or {}
+		props.style = type(optionalStyle) == "table" and optionalStyle or {}
+	elseif type(props) ~= "table" then
+		props = {}
 	end
 
 	local node = buildBaseNode(props, "text")
@@ -151,10 +163,11 @@ function elements.Text(props, optionalStyle, optionalProps)
 end
 
 function elements.Button(props)
-	if type(props) == "string" then
-		props = { text = props }
+	if type(props) == "string" or type(props) == "number" then
+		props = { text = tostring(props) }
+	elseif type(props) ~= "table" then
+		props = {}
 	end
-	props = props or {}
 
 	-- Default styles combined into one table
 	local defaultStyle = {
@@ -211,6 +224,8 @@ end
 function elements.Image(props)
 	if type(props) == "string" then
 		props = { src = props }
+	elseif type(props) ~= "table" then
+		props = {}
 	end
 
 	local node = buildBaseNode(props, "image")

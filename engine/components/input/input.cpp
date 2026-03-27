@@ -313,7 +313,6 @@ namespace Input {
     else if (event.type == SDL_MOUSEWHEEL) {
       int mx, my;
       SDL_GetMouseState(&mx, &my);
-
       Node* target = hitTest(root, mx, my);
 
       while (target) {
@@ -325,12 +324,26 @@ namespace Input {
             float scrollSpeed = 40.0f;
             target->scrollbarTimer = 1.5f;
 
-            target->targetScrollY -= event.wheel.y * scrollSpeed;
-            target->targetScrollX -= event.wheel.x * scrollSpeed;
+            // Use precise floating-point scroll deltas if using modern SDL2
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+            float wy = event.wheel.preciseY;
+            float wx = event.wheel.preciseX;
+#else
+            float wy = (float)event.wheel.y;
+            float wx = (float)event.wheel.x;
+#endif
+
+            // SDL MOUSEWHEEL can be flipped by OS settings
+            if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+              wy *= -1.0f;
+              wx *= -1.0f;
+            }
+
+            target->targetScrollY -= wy * scrollSpeed;
+            target->targetScrollX -= wx * scrollSpeed;
 
             target->targetScrollX = std::clamp(target->targetScrollX, 0.0f, maxScrollX);
             target->targetScrollY = std::clamp(target->targetScrollY, 0.0f, maxScrollY);
-
             break;
           }
         }

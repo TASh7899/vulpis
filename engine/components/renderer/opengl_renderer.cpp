@@ -460,7 +460,23 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       }
 
       if (clipStack.empty()) {
-        glDisable(GL_SCISSOR_TEST);
+        if (g_damageTracker.active && !g_damageTracker.fullScreen) {
+          int drawW, drawH;
+          SDL_GL_GetDrawableSize(window, &drawW, &drawH);
+          float dpiScale = (float)drawW / winWidth;
+          int sx = (int)std::floor(g_damageTracker.x * dpiScale);
+          int sw = (int)std::floor(g_damageTracker.w * dpiScale);
+          int sh = (int)std::floor(g_damageTracker.h * dpiScale);
+          int sy = drawH - (int)std::floor(g_damageTracker.y * dpiScale) - sh;
+
+          sx = std::max(0, sx);
+          sy = std::max(0, sy);
+          sw = std::min(drawW - sx, sw);
+          sh = std::min(drawH - sy, sh);
+
+          glEnable(GL_SCISSOR_TEST);
+          glScissor(sx, sy, sw, sh);
+        }
       } else {
         Rect restoredClip = clipStack.back();
 

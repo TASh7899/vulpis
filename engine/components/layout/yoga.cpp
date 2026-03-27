@@ -90,6 +90,14 @@ namespace Layout {
           YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionRow);
         }
 
+        if (n->flexWrap == FlexWrap::Wrap) {
+          YGNodeStyleSetFlexWrap(yogaNode, YGWrapWrap);
+        } else if (n->flexWrap == FlexWrap::WrapReverse) {
+          YGNodeStyleSetFlexWrap(yogaNode, YGWrapWrapReverse);
+        } else {
+          YGNodeStyleSetFlexWrap(yogaNode, YGWrapNoWrap);
+        }
+
         if (n->flexGrow > 0) {
           YGNodeStyleSetFlexGrow(yogaNode, n->flexGrow);
         }
@@ -106,7 +114,7 @@ namespace Layout {
           }
         }
 
-        if (n->widthStyle.isSet) {
+        if (n->heightStyle.isSet) {
           if (n->heightStyle.type == PERCENT) {
             YGNodeStyleSetHeightPercent(yogaNode, n->heightStyle.value);
           } else if (n->heightStyle.value > 0) {
