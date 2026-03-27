@@ -12,6 +12,7 @@ namespace Vulpis {
       double ramMB;
       double layoutTimeMs;
       double renderTimeMs;
+      double scriptTimeMs;
     };
 
     class StatsLogger {
@@ -19,7 +20,7 @@ namespace Vulpis {
         StatsLogger(const std::string& filename);
         ~StatsLogger();
 
-        void log(uint32_t time, float dt, double layoutMs, double renderMs);
+        void log(uint32_t time, float dt, double scriptMs, double layoutMs, double renderMs);
 
         static double GetCurrentRAMUsageMB();
 

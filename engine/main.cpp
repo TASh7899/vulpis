@@ -363,6 +363,9 @@ int main(int argc, char* argv[]) {
       needsRedraw = true;
     }
 
+    double currentScriptTimeMs = 0.0;
+    Uint64 scriptStart = SDL_GetPerformanceCounter();
+
     lua_getglobal(L, "on_tick");
     if (lua_isfunction(L, -1)) {
       lua_pushnumber(L, dt);
@@ -409,6 +412,9 @@ int main(int argc, char* argv[]) {
       }
       StateManager::instance().clearDirty();
     }
+
+    Uint64 scriptEnd = SDL_GetPerformanceCounter();
+    currentScriptTimeMs = ((scriptEnd - scriptStart) * 1000.0) / perfFreq;
 
     // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
     // ╏ CURSOR BLINKING ╏
@@ -480,7 +486,7 @@ int main(int argc, char* argv[]) {
         needsRedraw = false;
       }
       if (statsLogger) {
-        statsLogger->log(currentTime - appStartTime, dt, currentLayoutTimeMs, currentRenderTimeMs);
+        statsLogger->log(currentTime - appStartTime, dt, currentScriptTimeMs, currentLayoutTimeMs, currentRenderTimeMs);
       }
 
     }
