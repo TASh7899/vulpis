@@ -1,14 +1,17 @@
 #include "http_client.h"
+#include <codecvt>
 #include <cpr/api.h>
 #include <cpr/body.h>
 #include <cpr/status_codes.h>
 #include <lauxlib.h>
 #include <lua.h>
 #include <mutex>
+#include <queue>
 #include <stdexcept>
 #include <thread>
 #include <iostream>
 #include <cpr/cpr.h>
+#include <utility>
 #include <vector>
 
 #include "../../scripting/regsitry.h"
@@ -41,13 +44,18 @@ void HttpClient::GetAsync(const std::string &url, int luaCallbackRef) {
 }
 
 void HttpClient::ProcessQueue(lua_State *L) {
-  std::lock_guard<std::mutex> lock(queueMutex);
+  std::vector<HttpResponse> localQueue;
 
-  if (responseQueue.empty()) {
-    return;
+  {
+    std::lock_guard<std::mutex> lock(queueMutex);
+    if (responseQueue.empty()) {
+      return;
+    }
+    localQueue = std::move(responseQueue);
+    responseQueue.clear();
   }
 
-  for (const auto& res : responseQueue) {
+  for (const auto& res : localQueue) {
     lua_rawgeti(L, LUA_REGISTRYINDEX, res.luaCallbackRef);
     lua_newtable(L);
     lua_pushinteger(L, res.statusCode);
@@ -66,7 +74,6 @@ void HttpClient::ProcessQueue(lua_State *L) {
 
     luaL_unref(L, LUA_REGISTRYINDEX, res.luaCallbackRef);
 
-    responseQueue.clear();
   }
 
 }

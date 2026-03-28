@@ -57,6 +57,7 @@ int main(int argc, char* argv[]) {
 
   SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
   SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
+  SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
   int winW = 800;
   int winH = 600;

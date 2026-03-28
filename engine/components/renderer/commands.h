@@ -35,6 +35,8 @@ struct DrawRectCommand {
 
 struct PushClipCommand {
   Rect rect;
+  float borderRadius = 0.0f;
+  float borderWidth = 0.0f;
 };
 
 struct PopClipCommand {
@@ -52,6 +54,7 @@ struct DrawImageCommand {
   
   float borderRadius = 0.0f; 
   Rect nodeRect = {0, 0, 0, 0};
+  float borderWidth = 0.0f;
 
 };
 

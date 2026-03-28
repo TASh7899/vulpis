@@ -424,6 +424,7 @@ Node* buildNode(lua_State* L, int idx) {
   }
 
   n->spacing = getInt("gap", getInt("spacing", 0));
+  n->zIndex = getInt("zIndex", 0);
 
   int p = getInt("padding", 0);
   n->padding       = p;
@@ -761,9 +762,9 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
         {renderX, renderY, n->w, n->h},
         bgColor,
         n->borderRadius,
-        0.0f,
-        {0, 0, 0, 0}
-        });
+        n->borderWidth,
+        bColor
+    });
   }
 
 // BACKGROUND IMAGE OR SKELETON LOADER
@@ -822,7 +823,8 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
           {255, 255, 255, (uint8_t)(255 * alphaMultiplier)},
           uMin, vMin, uMax, vMax,
           n->borderRadius,
-          {renderX, renderY, n->w, n->h}
+          {renderX, renderY, n->w, n->h},
+          n->borderWidth
           });
     }
   }
@@ -835,7 +837,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   }
 
   if (applyClip) {
-    list.push(PushClipCommand{{renderX, renderY, n->w, n->h}});
+    list.push(PushClipCommand{{renderX, renderY, n->w, n->h}, n->borderRadius, n->borderWidth});
   }
 
   if (n->type == "image" && n->textureId != 0) {
@@ -895,7 +897,8 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
           imageTint,
           uMin, vMin, uMax, vMax,
           n->borderRadius,
-          {renderX, renderY, n->w, n->h}
+          {renderX, renderY, n->w, n->h},
+          n->borderWidth
           });
     }
   }
@@ -1042,7 +1045,12 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     }
   }
 
-  for (Node* c : n->children) {
+  std::vector<Node*> sortedChildren = n->children;
+  std::stable_sort(sortedChildren.begin(), sortedChildren.end(), [](Node* a, Node* b) {
+      return a->zIndex < b->zIndex;
+  });
+
+  for (Node* c : sortedChildren) {
     renderNodePass(c, list, totalOffsetX - n->scrollX, totalOffsetY - n->scrollY, isDragPass, treatAsDragged, parentAlpha);
   }
 

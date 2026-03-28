@@ -1,4 +1,7 @@
 #pragma once
+#ifndef VULPIS_UI_H
+#define VULPIS_UI_H
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -186,6 +189,8 @@ std::vector<uint32_t> codepoints;
   int padding = 0;
   int paddingTop = 0, paddingBottom = 0, paddingLeft = 0, paddingRight = 0;
 
+  int zIndex = 0;
+
   float minWidth = 0, maxWidth = 99999.0f;
   float minHeight = 0, maxHeight = 99999.0f;
 
@@ -321,3 +326,4 @@ void UI_UpdateSmoothScrolling(Node* n, float dt);
 static void appendCP(std::string& s, uint32_t cp);
 
 void computeTextLayout(Node* n);
+#endif

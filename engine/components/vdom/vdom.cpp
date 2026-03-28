@@ -126,6 +126,8 @@ namespace VDOM {
       lua_newtable(L);
     }
 
+    update(n->zIndex, getIntProp(L, "zIndex", 0), paintChanged);
+
     if (n->type == "text") {
 
       std::string fStyleStr = getStringProp(L, "fontStyle", "normal");

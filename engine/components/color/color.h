@@ -1,3 +1,7 @@
+#pragma once
+#ifndef VULPIS_COLOR_H
+#define VULPIS_COLOR_H
+
 #include <SDL2/SDL_pixels.h>
 #include <cctype>
 #include <iostream>
@@ -6,3 +10,4 @@
 
 SDL_Color parseHexColor(const char* hexStr);
 
+#endif

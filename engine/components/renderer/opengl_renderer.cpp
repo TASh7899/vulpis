@@ -26,6 +26,7 @@ out vec2 fLocalPos;
 out vec4 fBoxData;
 out vec4 fBorderColor;
 out float fType;
+out vec2 vScreenPos;
 
 uniform mat4 projection;
 
@@ -37,6 +38,7 @@ void main() {
   fBoxData = aBoxData;
   fBorderColor = aBorderColor;
   fType = aType;
+  vScreenPos = aPos;
 }
 )";
 
@@ -50,64 +52,108 @@ in vec2 fLocalPos;
 in vec4 fBoxData;
 in vec4 fBorderColor;
 in float fType;
+in vec2 vScreenPos;
 
 uniform sampler2D texSampler;
 uniform sampler2DArray fontSampler;
 uniform int useArray;
 
-// Signed Distance Field calculation for a rounded box
+// NEW: Global Fragment Clip Uniforms (No Stencil Buffer Required)
+uniform vec4 uClipRect; 
+uniform vec3 uClipData;
+
 float roundedBoxSDF(vec2 p, vec2 b, float r) {
   vec2 q = abs(p) - b + vec2(r);
   return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
 }
 
 void main() {
-  if (fType > 0.5) {
-     vec2 halfSize = vec2(fBoxData.x, fBoxData.y) / 2.0;
-     vec2 center = halfSize;
-     
-     // cap radius so it doesn't exceed the box dimensions
-     float radius = min(fBoxData.z, min(halfSize.x, halfSize.y));
-     float borderW = fBoxData.w;
+    vec4 finalOutput = vec4(0.0);
 
-     float dist = roundedBoxSDF(fLocalPos - center, halfSize, radius);
-     float edgeSoftness = max(fwidth(dist), 0.001); // fwidth guarantees smooth anti-aliasing
+    if (fType > 0.5) { 
+        // -----------------------------------------------------------------
+        // TYPE 1.0: BASE RECT WITH BORDER
+        // -----------------------------------------------------------------
+        vec2 halfSize = vec2(fBoxData.x, fBoxData.y) / 2.0;
+        vec2 center = halfSize;
+        float radius = min(fBoxData.z, min(halfSize.x, halfSize.y));
+        float borderW = fBoxData.w;
 
-     float alpha = smoothstep(edgeSoftness, -edgeSoftness, dist);
-     if (alpha < 0.001) discard;
+        float dist = roundedBoxSDF(fLocalPos - center, halfSize, radius);
+        float fw = fwidth(dist);
+        float edgeSoftness = max(fw, 0.001);
 
-     vec4 finalColor = fColor;
+        float alpha = smoothstep(edgeSoftness, -edgeSoftness, dist);
+        if (alpha < 0.001) discard;
 
-     // mix border and background inwards from the edge
-     if (borderW > 0.0) {
-         float borderDist = dist + borderW;
-         float borderAlpha = smoothstep(edgeSoftness, -edgeSoftness, borderDist);
-         finalColor = mix(fBorderColor, fColor, borderAlpha);
-     }
-     
-     FragColor = finalColor * vec4(1.0, 1.0, 1.0, alpha);
-  } else {
-     vec4 texColor;
-     if (useArray == 1) {
-       float mask = texture(fontSampler, fTextCoord).r;
-       mask = pow(max(mask, 0.0), 1.0/2.2);
-       texColor = vec4(1.0, 1.0, 1.0, mask);
-     } else {
-       texColor = texture(texSampler, fTextCoord.xy);
-     }
-    float alpha = 1.0;
-     if (fBoxData.z > 0.0 && useArray == 0) {
-         vec2 halfSize = vec2(fBoxData.x, fBoxData.y) / 2.0;
-         vec2 center = halfSize;
-         float radius = min(fBoxData.z, min(halfSize.x, halfSize.y));
-         float dist = roundedBoxSDF(fLocalPos - center, halfSize, radius);
-         float edgeSoftness = max(fwidth(dist), 0.001);
-         alpha = smoothstep(edgeSoftness, -edgeSoftness, dist);
-         if (alpha < 0.001) discard;
-     }
+        vec4 finalColor = fColor;
 
-      FragColor = fColor * texColor * vec4(1.0, 1.0, 1.0, alpha);
-  }
+        if (borderW > 0.0) {
+            float borderDist = dist + borderW;
+            float borderAlpha = smoothstep(edgeSoftness, -edgeSoftness, borderDist);
+            
+            vec3 rgb = mix(fBorderColor.rgb, fColor.a == 0.0 ? fBorderColor.rgb : fColor.rgb, borderAlpha);
+            float a = mix(fBorderColor.a, fColor.a, borderAlpha);
+            finalColor = vec4(rgb, a);
+        }
+        
+        finalOutput = finalColor * vec4(1.0, 1.0, 1.0, alpha);
+    } else {
+        // -----------------------------------------------------------------
+        // TYPE 0.0: IMAGES & TEXT
+        // -----------------------------------------------------------------
+        vec4 texColor;
+        if (useArray == 1) {
+            float mask = texture(fontSampler, fTextCoord).r;
+            mask = pow(max(mask, 0.0), 1.0/2.2);
+            texColor = vec4(1.0, 1.0, 1.0, mask);
+        } else {
+            texColor = texture(texSampler, fTextCoord.xy);
+        }
+        
+        float alpha = 1.0;
+        if (fBoxData.z > 0.0 && useArray == 0) {
+            vec2 halfSize = vec2(fBoxData.x, fBoxData.y) / 2.0;
+            vec2 center = halfSize;
+            float radius = min(fBoxData.z, min(halfSize.x, halfSize.y));
+            float dist = roundedBoxSDF(fLocalPos - center, halfSize, radius);
+            
+            float fw = fwidth(dist);
+            float edgeSoftness = max(fw, 0.001);
+
+            if (fBoxData.w > 0.0) {
+                dist += fBoxData.w; 
+            }
+            
+            alpha = smoothstep(edgeSoftness, -edgeSoftness, dist);
+            if (alpha < 0.001) discard;
+        }
+
+        finalOutput = fColor * texColor * vec4(1.0, 1.0, 1.0, alpha);
+    }
+
+    // -----------------------------------------------------------------
+    // APPLY GLOBAL FRAGMENT CLIP (Mathematically Flawless)
+    // -----------------------------------------------------------------
+    if (uClipData.z > 0.5) {
+        vec2 clipHalfSize = vec2(uClipRect.z, uClipRect.w) * 0.5;
+        vec2 clipCenter = vec2(uClipRect.x, uClipRect.y) + clipHalfSize;
+        
+        float clipDist = roundedBoxSDF(vScreenPos - clipCenter, clipHalfSize, uClipData.x);
+        
+        // Contract the clip area perfectly inside the parent's border
+        if (uClipData.y > 0.0) {
+            clipDist += uClipData.y;
+        }
+
+        float fw = fwidth(clipDist);
+        float clipAlpha = smoothstep(max(fw, 0.001), -max(fw, 0.001), clipDist);
+        
+        finalOutput.a *= clipAlpha;
+        if (finalOutput.a < 0.001) discard;
+    }
+
+    FragColor = finalOutput;
 }
 )";
 
@@ -229,13 +275,16 @@ void OpenGLRenderer::beginFrame(const DamageRect& damage) {
   }
 
   glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT);
+  glClear(GL_COLOR_BUFFER_BIT); 
 
   glUseProgram(shaderProgram);
 
   useArrayLoc = glGetUniformLocation(shaderProgram, "useArray");
   glUniform1i(useArrayLoc, 0);
   currentIsArray = false;
+  
+  GLint clipDataLoc = glGetUniformLocation(shaderProgram, "uClipData");
+  glUniform3f(clipDataLoc, 0.0f, 0.0f, 0.0f); 
 
   glUniform1i(glGetUniformLocation(shaderProgram, "texSampler"), 0);
   glUniform1i(glGetUniformLocation(shaderProgram, "fontSampler"), 1);
@@ -268,7 +317,6 @@ void OpenGLRenderer::endFrame() {
 void OpenGLRenderer::flush() {
   if (vertices.empty()) return;
 
-
   glBindVertexArray(vao);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
@@ -279,6 +327,11 @@ void OpenGLRenderer::flush() {
   vertices.clear();
 }
 
+struct ClipStackEntry {
+  Rect intersected;
+  PushClipCommand originalCmd;
+};
+
 void OpenGLRenderer::submit(const RenderCommandList& list) {
   float dpiScale = UI_GetDPIScale();
 
@@ -286,11 +339,11 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
     return std::round(val * dpiScale) / dpiScale;
   };
 
-  std::vector<Rect> clipStack;
+  std::vector<ClipStackEntry> clipStack;
 
   for (const auto& cmd : list.commands) {
     if (std::holds_alternative<DrawRectCommand>(cmd)) {
-      if ( currentIsArray || currentTextureID != whiteTexture) {
+      if (currentIsArray || currentTextureID != whiteTexture) {
         flush();
         currentIsArray = false;
         glUniform1i(useArrayLoc, 0);
@@ -302,8 +355,10 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       const auto& data = std::get<DrawRectCommand>(cmd);
       float x = snap(data.rect.x);
       float y = snap(data.rect.y);
-      float w = snap(data.rect.w);
-      float h = snap(data.rect.h);
+      float right = snap(data.rect.x + data.rect.w);
+      float bottom = snap(data.rect.y + data.rect.h);
+      float w = right - x;
+      float h = bottom - y;
       Color c = data.color;
 
       float radius = data.borderRadius;
@@ -311,12 +366,10 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       Color bc = data.borderColor;
       float type = (radius > 0.0f || borderW > 0.0f) ? 1.0f : 0.0f;
 
-      // triangle 1
       vertices.push_back({x, y, 0.0f, 0.0f, 0.0f, c,     0.0f, 0.0f, w, h, radius, borderW, bc, type});
       vertices.push_back({x + w, y, 0.0f, 0.0f, 0.0f, c, w,    0.0f, w, h, radius, borderW, bc, type});
       vertices.push_back({x + w, y + h, 0.0f, 0.0f, 0.0f, c, w, h, w, h, radius, borderW, bc, type});
 
-      // triangle 2
       vertices.push_back({x, y, 0.0f, 0.0f, 0.0f, c,     0.0f, 0.0f, w, h, radius, borderW, bc, type});
       vertices.push_back({x, y + h, 0.0f, 0.0f, 0.0f, c, 0.0f, h,    w, h, radius, borderW, bc, type});
       vertices.push_back({x + w, y + h, 0.0f, 0.0f, 0.0f, c, w,    h,    w, h, radius, borderW, bc, type});
@@ -326,9 +379,7 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       const auto& data = std::get<DrawTextCommand>(cmd);
       if (!data.font) continue;
 
-
       float fSize = (float)data.font->GetLogicalSize();
-
       float underlineY = data.y + (fSize*0.1f);
       float strikeThroughY = data.y - (data.font->GetLogicalAscent() * 0.32f);
 
@@ -360,12 +411,10 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       for (uint32_t c : codepoints) {
         const Character& ch = data.font->GetCharacter(c);
 
-
         float xpos = snap(cursorX + (ch.BearingX / dpiScale));
         float ypos = snap(cursorY + ((ch.SizeY - ch.BearingY) / dpiScale));
         float w = (float)ch.SizeX / dpiScale;
         float h = (float)ch.SizeY / dpiScale;
-
 
         float left   = xpos;
         float right  = xpos + w;
@@ -383,9 +432,6 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         cursorX += ((ch.Advance >> 6) / dpiScale);
       }
 
-      // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-      // ╏ LOGIC FOR UNDERLINE OR STRIKE LINE ╏
-      // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
       if (data.decoration != TextDecoration::None) {
         if (currentIsArray || currentTextureID != whiteTexture) {
           flush();
@@ -397,7 +443,6 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         }
 
         float decorationThickness = std::max(1.0f, std::round(fSize * 0.05f));
-
         float width = cursorX - textStartX;
         float rawY = (data.decoration == TextDecoration::Underline) ? underlineY : strikeThroughY;
 
@@ -411,10 +456,8 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         vertices.push_back({ textStartX,         lineBottom,  0.0f, 0.0f, 0.0f, data.color });
         vertices.push_back({ textStartX,         lineY,       0.0f, 0.0f, 0.0f, data.color });
         vertices.push_back({ textStartX + width, lineY,       0.0f, 0.0f, 0.0f, data.color });
-
       }
     }
-
 
     else if (std::holds_alternative<PushClipCommand>(cmd)) {
       flush();
@@ -422,34 +465,46 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
 
       Rect currentClip = data.rect;
       if (!clipStack.empty()) {
-        Rect parentClip = clipStack.back();
-
+        Rect parentClip = clipStack.back().intersected;
         float x1 = std::max(currentClip.x, parentClip.x);
         float y1 = std::max(currentClip.y, parentClip.y);
         float x2 = std::min(currentClip.x + currentClip.w, parentClip.x + parentClip.w);
         float y2 = std::min(currentClip.y + currentClip.h, parentClip.y + parentClip.h);
-
         currentClip.x = x1;
         currentClip.y = y1;
         currentClip.w = std::max(0.0f, x2 - x1);
         currentClip.h = std::max(0.0f, y2 - y1);
       }
-
-      clipStack.push_back(currentClip);
+      clipStack.push_back({currentClip, data});
 
       int drawW, drawH;
       SDL_GL_GetDrawableSize(window, &drawW, &drawH);
-
       float scaleX = (float)drawW / winWidth;
       float scaleY = (float)drawH / winHeight;
 
-      int scissorX = (float)(currentClip.x * scaleX);
-      int scissorY = (float)(drawH - (currentClip.y + currentClip.h) * scaleY);
-      int scissorW = (int)(currentClip.w * scaleX);
-      int scissorH = (int)(currentClip.h * scaleY);
+      float clipLeft = snap(currentClip.x);
+      float clipTop = snap(currentClip.y);
+      float clipRight = snap(currentClip.x + currentClip.w);
+      float clipBottom = snap(currentClip.y + currentClip.h);
+
+      int scissorX = (int)std::round(clipLeft * scaleX);
+      int scissorY = (int)std::round(drawH - clipBottom * scaleY);
+      int scissorW = (int)std::round((clipRight - clipLeft) * scaleX);
+      int scissorH = (int)std::round((clipBottom - clipTop) * scaleY);
 
       glEnable(GL_SCISSOR_TEST);
       glScissor(scissorX, scissorY, scissorW, scissorH);
+
+      GLint clipRectLoc = glGetUniformLocation(shaderProgram, "uClipRect");
+      GLint clipDataLoc = glGetUniformLocation(shaderProgram, "uClipData");
+      
+      float uLeft = snap(data.rect.x);
+      float uTop = snap(data.rect.y);
+      float uW = snap(data.rect.x + data.rect.w) - uLeft;
+      float uH = snap(data.rect.y + data.rect.h) - uTop;
+
+      glUniform4f(clipRectLoc, uLeft, uTop, uW, uH);
+      glUniform3f(clipDataLoc, data.borderRadius, data.borderWidth, 1.0f);
     }
 
     else if (std::holds_alternative<PopClipCommand>(cmd)) {
@@ -459,7 +514,12 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
         clipStack.pop_back();
       }
 
+      GLint clipRectLoc = glGetUniformLocation(shaderProgram, "uClipRect");
+      GLint clipDataLoc = glGetUniformLocation(shaderProgram, "uClipData");
+
       if (clipStack.empty()) {
+        glUniform3f(clipDataLoc, 0.0f, 0.0f, 0.0f);
+
         if (g_damageTracker.active && !g_damageTracker.fullScreen) {
           int drawW, drawH;
           SDL_GL_GetDrawableSize(window, &drawW, &drawH);
@@ -476,23 +536,38 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
 
           glEnable(GL_SCISSOR_TEST);
           glScissor(sx, sy, sw, sh);
+        } else {
+            glDisable(GL_SCISSOR_TEST);
         }
       } else {
-        Rect restoredClip = clipStack.back();
+        Rect restoredClip = clipStack.back().intersected;
+        const auto& entry = clipStack.back();
+
+        float uLeft = snap(entry.originalCmd.rect.x);
+        float uTop = snap(entry.originalCmd.rect.y);
+        float uW = snap(entry.originalCmd.rect.x + entry.originalCmd.rect.w) - uLeft;
+        float uH = snap(entry.originalCmd.rect.y + entry.originalCmd.rect.h) - uTop;
+
+        glUniform4f(clipRectLoc, uLeft, uTop, uW, uH);
+        glUniform3f(clipDataLoc, entry.originalCmd.borderRadius, entry.originalCmd.borderWidth, 1.0f);
 
         int drawW, drawH;
         SDL_GL_GetDrawableSize(window, &drawW, &drawH);
         float scaleX = (float)drawW / winWidth;
         float scaleY = (float)drawH / winHeight;
 
-        int scissorX = (float)(restoredClip.x * scaleX);
-        int scissorY = (float)(drawH - (restoredClip.y + restoredClip.h) * scaleY);
-        int scissorW = (int)(restoredClip.w * scaleX);
-        int scissorH = (int)(restoredClip.h * scaleY);
+        float clipLeft = snap(restoredClip.x);
+        float clipTop = snap(restoredClip.y);
+        float clipRight = snap(restoredClip.x + restoredClip.w);
+        float clipBottom = snap(restoredClip.y + restoredClip.h);
+
+        int scissorX = (int)std::round(clipLeft * scaleX);
+        int scissorY = (int)std::round(drawH - clipBottom * scaleY);
+        int scissorW = (int)std::round((clipRight - clipLeft) * scaleX);
+        int scissorH = (int)std::round((clipBottom - clipTop) * scaleY);
 
         glScissor(scissorX, scissorY, scissorW, scissorH);
       }
-
     }
 
     else if (std::holds_alternative<DrawImageCommand>(cmd)) {
@@ -511,25 +586,30 @@ void OpenGLRenderer::submit(const RenderCommandList& list) {
       float top    = snap(data.rect.y);
       float right  = snap(data.rect.x + data.rect.w);
       float bottom = snap(data.rect.y + data.rect.h);
+      float drawW  = right - left;
+      float drawH  = bottom - top;
 
-      float localLeft = data.rect.x - data.nodeRect.x;
-      float localTop = data.rect.y - data.nodeRect.y;
-      float localRight = localLeft + data.rect.w;
-      float localBottom = localTop + data.rect.h;
+      float nodeX = snap(data.nodeRect.x);
+      float nodeY = snap(data.nodeRect.y);
+      float nodeRight = snap(data.nodeRect.x + data.nodeRect.w);
+      float nodeBottom = snap(data.nodeRect.y + data.nodeRect.h);
+      float boxW = nodeRight - nodeX;
+      float boxH = nodeBottom - nodeY;
 
-      float boxW = data.nodeRect.w;
-      float boxH = data.nodeRect.h;
+      float localLeft = left - nodeX;
+      float localTop = top - nodeY;
+      float localRight = localLeft + drawW;
+      float localBottom = localTop + drawH;
       float radius = data.borderRadius;
 
-      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint, localLeft, localTop, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
-      vertices.push_back({right, top, data.uMax, data.vMin, 0.0f, data.tint, localRight, localTop, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
-      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint, localRight, localBottom, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
+      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint, localLeft, localTop, boxW, boxH, radius, data.borderWidth, {0,0,0,0}, 0.0f});
+      vertices.push_back({right, top, data.uMax, data.vMin, 0.0f, data.tint, localRight, localTop, boxW, boxH, radius, data.borderWidth, {0,0,0,0}, 0.0f});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint, localRight, localBottom, boxW, boxH, radius, data.borderWidth, {0,0,0,0}, 0.0f});
 
-      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint, localLeft, localTop, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
-      vertices.push_back({left, bottom, data.uMin, data.vMax, 0.0f, data.tint, localLeft, localBottom, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
-      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint, localRight, localBottom, boxW, boxH, radius, 0.0f, {0,0,0,0}, 0.0f});
+      vertices.push_back({left, top, data.uMin, data.vMin, 0.0f, data.tint, localLeft, localTop, boxW, boxH, radius, data.borderWidth, {0,0,0,0}, 0.0f});
+      vertices.push_back({left, bottom, data.uMin, data.vMax, 0.0f, data.tint, localLeft, localBottom, boxW, boxH, radius, data.borderWidth, {0,0,0,0}, 0.0f});
+      vertices.push_back({right, bottom, data.uMax, data.vMax, 0.0f, data.tint, localRight, localBottom, boxW, boxH, radius, data.borderWidth, {0,0,0,0}, 0.0f});
 
     }
-
   }
 }
