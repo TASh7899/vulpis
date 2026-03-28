@@ -2,6 +2,7 @@
 #include <lauxlib.h>
 #include <lua.h>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "../text/font.h"
 #include "../../configLogic/font/font_registry.h"
@@ -566,13 +567,21 @@ namespace VDOM {
 
   void reconcileChildren(lua_State* L, Node* current, int childrenIdx) {
     int luaCount = lua_rawlen(L, childrenIdx);
+    size_t oldLen = current->children.size();
 
-    std::vector<bool> reused(current->children.size(), false);
+    std::vector<bool> reused(oldLen, false);
     std::vector<Node*> newChildren;
     newChildren.reserve(luaCount);
 
+    std::unordered_map<std::string, size_t> keyedChildren;
+    for (size_t i = 0; i < oldLen; ++i) {
+      if (!current->children[i]->key.empty()) {
+        keyedChildren[current->children[i]->key] = i; 
+      }
+    }
+
     for (int i = 0; i < luaCount; ++i) {
-      lua_rawgeti(L, childrenIdx, i+1);
+      lua_rawgeti(L, childrenIdx, i + 1);
       int childIdx = lua_gettop(L);
 
       std::string key = "";
@@ -585,21 +594,21 @@ namespace VDOM {
       if (lua_isstring(L, -1)) newType = lua_tostring(L, -1);
       lua_pop(L, 1);
 
-      // trying to find match by key
       Node* matchedNode = nullptr;
+
       if (!key.empty()) {
-        for (size_t j = 0; j < current->children.size(); j++) {
-          if (!reused[j] && current->children[j]->key == key && current->children[j]->type == newType) {
-            matchedNode = current->children[j];
-            reused[j] = true;
-            break;
+        auto it = keyedChildren.find(key);
+        if (it != keyedChildren.end()) {
+          size_t oldIdx = it->second;
+          if (!reused[oldIdx] && current->children[oldIdx]->type == newType) {
+            matchedNode = current->children[oldIdx];
+            reused[oldIdx] = true;
           }
         }
       }
 
-      // try to find match by index
-      if (!matchedNode) {
-        if (i < current->children.size() && !reused[i] && current->children[i]->key.empty() && current->children[i]->type == newType) {
+      if (!matchedNode && i < oldLen) {
+        if (!reused[i] && current->children[i]->key.empty() && current->children[i]->type == newType) {
           matchedNode = current->children[i];
           reused[i] = true;
         }
@@ -623,7 +632,7 @@ namespace VDOM {
       lua_pop(L, 1);
     }
 
-    for (size_t i = 0; i < current->children.size(); i++) {
+    for (size_t i = 0; i < oldLen; i++) {
       if (!reused[i]) {
         freeTree(L, current->children[i]);
         current->makeLayoutDirty();
@@ -631,7 +640,6 @@ namespace VDOM {
     }
 
     current->children = newChildren;
-
   }
 
   void reconcile(lua_State *L, Node *current, int idx) {
