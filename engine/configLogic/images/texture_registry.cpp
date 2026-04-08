@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <ios>
 #include <iterator>
 #include <memory>
 #include <queue>
@@ -95,7 +96,7 @@ namespace TextureRegistry {
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
       glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
       textureCache[path] = {textureID, 1, 0, 0, false};
       idToPath[textureID] = path;
@@ -132,55 +133,42 @@ namespace TextureRegistry {
           cpr::Response r = session.Get();
 
           if (r.status_code == 200) {
+            std:std::filesystem::create_directories(std::filesystem::path(cachePathStr).parent_path());
+            std::ofstream out(cachePathStr, std::ios::binary);
+
+            if (out) {
+              out.write(r.text.data(), r.text.size());
+            }
+
             int tw, th, tc;
             unsigned char* pixels = stbi_load_from_memory(
               reinterpret_cast<unsigned char*>(r.text.data()),
               r.text.size(), &tw, &th, &tc, 4);
 
             if (pixels) {
-              size_t rawSize = tw * th * 4;
-              unsigned char* pixelsCopy = new unsigned char[rawSize];
-              std::memcpy(pixelsCopy, pixels, rawSize);
-
-              // A: Push raw pixels to GPU immediately for fast UI response
-              {
-                std::lock_guard<std::mutex> lock(queueMutex);
-                uploadQueue.push_back({textureID, 0, tw, th, 0, pixels, false});
-              }
-
-              // B: Compress and save to disk cache in the background
-              size_t dataSize = ((tw + 3) / 4) * ((th + 3) / 4) * 16;
-              unsigned char* dxtData = new unsigned char[dataSize];
-              CompressToDXT5(pixelsCopy, tw, th, dxtData);
-
-              delete[] pixelsCopy;
-
-              std::filesystem::create_directories(std::filesystem::path(cachePathStr).parent_path());
-              std::ofstream out(cachePathStr, std::ios::binary);
-              if (out) {
-                out.write(reinterpret_cast<char*>(&tw), sizeof(int));
-                out.write(reinterpret_cast<char*>(&th), sizeof(int));
-                out.write(reinterpret_cast<const char*>(dxtData), dataSize);
-              }
-              delete[] dxtData;
+              std::lock_guard<std::mutex> lock(queueMutex);
+              uploadQueue.push_back({textureID, 0, tw, th, 0, pixels, false});
             }
           } else {
             std::cerr << "[Texture Download Failed] Status: " << r.status_code << " Error: " << r.error.message << std::endl;
           }
         } else {
           // Load instantly from the local hard drive cache!
-          std::ifstream file(cachePathStr, std::ios::binary);
+          std::ifstream file(cachePathStr, std::ios::binary | std::ios::ate);
           if (file) {
-            int tw, th;
-            file.read(reinterpret_cast<char*>(&tw), sizeof(int));
-            file.read(reinterpret_cast<char*>(&th), sizeof(int));
+            std::streamsize size = file.tellg();
+            file.seekg(0, std::ios::beg);
 
-            size_t dataSize = ((tw + 3) / 4) * ((th + 3) / 4) * 16;
-            unsigned char* buffer = new unsigned char[dataSize];
-            file.read(reinterpret_cast<char*>(buffer), dataSize);
+            std::vector<unsigned char> buffer(size);
+            if (file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+              int tw, th, tc;
+              unsigned char* pixels = stbi_load_from_memory(buffer.data(), size, &tw, &th, &tc, 4);
 
-            std::lock_guard<std::mutex> lock(queueMutex);
-            uploadQueue.push_back({textureID, 0, tw, th, dataSize, buffer, true});
+              if (pixels) {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                uploadQueue.push_back({textureID, 0, tw, th, 0, pixels, false});
+              }
+            }
           }
         }
       }).detach();
@@ -246,7 +234,7 @@ namespace TextureRegistry {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     textureCache[path] = {textureID, 1, w, h, false};
     idToPath[textureID] = path;

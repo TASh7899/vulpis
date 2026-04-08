@@ -1,9 +1,10 @@
 #pragma once
+#include <lua.hpp>
 #include <string>
 #include <vector>
 #include <mutex>
 #include <atomic>
-#include <lua.hpp>
+#include <map>
 
 struct HttpResponse {
   int statusCode;
@@ -16,9 +17,16 @@ class HttpClient {
   public:
     static void Init();
     static void ShutDown();
-    static void GetAsync(const std::string& url, int luaCallbackRef);
-    static void PostAsync(const std::string& url, const std::string& payload, int luaCallbackRef);
     static void ProcessQueue(lua_State* L);
+
+    static void FetchAsync(
+        const std::string& url, 
+        const std::string& method, 
+        long timeout, 
+        const std::string& body, 
+        const std::map<std::string, std::string>& headers, 
+        int luaCallbackRef
+    );
 
   private:
     static std::vector<HttpResponse> responseQueue;
