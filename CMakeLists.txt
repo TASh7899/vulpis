@@ -27,6 +27,7 @@ find_package(OpenGL REQUIRED)
 find_package(Freetype REQUIRED) 
 find_package(yoga CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
+find_package(ixwebsocket CONFIG REQUIRED)
 
 # 3. Manual GLAD (internal)
 add_library(glad STATIC third_party/glad/src/glad.c)
@@ -46,6 +47,7 @@ add_executable(vulpis
   engine/components/text/font.cpp
   engine/components/system/pathUtils.cpp
   engine/components/network/http_client.cpp
+  engine/components/network/websockets/websockets_client.cpp
   engine/configLogic/font/font_registry.cpp
   engine/configLogic/engineConf/engine_config.cpp
   engine/configLogic/images/texture_registry.cpp
@@ -61,6 +63,7 @@ target_link_libraries(vulpis PRIVATE
   glad
   Freetype::Freetype
   cpr::cpr
+  ixwebsocket::ixwebsocket
   ${CMAKE_DL_LIBS}
 )
 

@@ -17,7 +17,7 @@ class HttpClient {
   public:
     static void Init();
     static void ShutDown();
-    static void ProcessQueue(lua_State* L);
+    static bool ProcessQueue(lua_State* L);
 
     static void FetchAsync(
         const std::string& url, 

@@ -1,3 +1,4 @@
+#include <SDL2/SDL.h>
 #include "http_client.h"
 #include <codecvt>
 #include <cpr/api.h>
@@ -89,17 +90,21 @@ void HttpClient::FetchAsync(const std::string &url, const std::string &method, l
 
     std::lock_guard<std::mutex> lock(queueMutex);
     responseQueue.push_back(res);
+    SDL_Event s_event;
+    SDL_zero(s_event);
+    s_event.type = SDL_USEREVENT;
+    SDL_PushEvent(&s_event);
     }).detach();
 }
 
 
-void HttpClient::ProcessQueue(lua_State *L) {
+bool HttpClient::ProcessQueue(lua_State *L) {
   std::vector<HttpResponse> localQueue;
 
   {
     std::lock_guard<std::mutex> lock(queueMutex);
     if (responseQueue.empty()) {
-      return;
+      return false;
     }
     localQueue = std::move(responseQueue);
     responseQueue.clear();
@@ -124,6 +129,8 @@ void HttpClient::ProcessQueue(lua_State *L) {
 
     luaL_unref(L, LUA_REGISTRYINDEX, res.luaCallbackRef);
   }
+
+  return true;
 }
 
 int Lua_Fetch(lua_State* L) {

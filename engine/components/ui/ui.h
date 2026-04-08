@@ -101,6 +101,12 @@ enum class FlexWrap {
   WrapReverse
 };
 
+enum class AutoScroll {
+    None,
+    Top,
+    Bottom
+};
+
 struct Node {
   std::string type;
   std::string key;
@@ -109,9 +115,10 @@ struct Node {
 
   std::string src;
   uint32_t textureId = 0;
+  bool autoScrollBottom = false;
 
   std::string text;
-std::vector<uint32_t> codepoints;
+  std::vector<uint32_t> codepoints;
   std::string objectFit = "fill";
   int fontId = 0;
   Font* font = nullptr;
@@ -181,6 +188,8 @@ std::vector<uint32_t> codepoints;
   int selectionStart = -1;
   int selectionEnd = -1;
 
+  AutoScroll autoScroll = AutoScroll::None;
+  float lastContentH = 0.0f;
 
   int spacing = 0;
   float opacity = 1.0f;

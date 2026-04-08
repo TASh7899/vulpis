@@ -1045,7 +1045,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     }
   }
 
-  std::vector<Node*> sortedChildren = n->children;
+std::vector<Node*> sortedChildren = n->children;
   std::stable_sort(sortedChildren.begin(), sortedChildren.end(), [](Node* a, Node* b) {
       return a->zIndex < b->zIndex;
   });
@@ -1360,6 +1360,17 @@ void UI_UpdateSmoothScrolling(Node *n, float dt) {
   if (n->overflowHidden) {
     float maxScrollY = std::max(0.0f, n->contentH - n->h);
     float maxScrollX = std::max(0.0f, n->contentW - n->w);
+
+    if (n->contentH > n->lastContentH) {
+      if (n->autoScroll == AutoScroll::Bottom) {
+        n->targetScrollY = maxScrollY;
+      } else if (n->autoScroll == AutoScroll::Top) {
+        n->targetScrollY = 0.0f;
+      }
+    }
+
+    n->lastContentH = n->contentH;
+
     n->targetScrollY = std::clamp(n->targetScrollY, 0.0f, maxScrollY);
     n->targetScrollX = std::clamp(n->targetScrollX, 0.0f, maxScrollX);
 

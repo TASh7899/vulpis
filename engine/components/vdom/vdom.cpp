@@ -430,6 +430,16 @@ namespace VDOM {
       n->makePaintDirty();
     }
 
+    std::string autoScrollStr = getStringProp(L, "autoScroll", "none");
+    AutoScroll newAutoScroll = AutoScroll::None;
+    
+    if (autoScrollStr == "bottom") newAutoScroll = AutoScroll::Bottom;
+    else if (autoScrollStr == "top") newAutoScroll = AutoScroll::Top;
+
+    if (n->autoScroll != newAutoScroll) {
+      n->autoScroll = newAutoScroll;
+    }
+
     lua_getfield(L, -1, "wordWrap");
     if (!lua_isnil(L, -1)) {
       bool newWordWrap = lua_toboolean(L, -1);

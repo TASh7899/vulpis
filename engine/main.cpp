@@ -28,6 +28,7 @@
 #include "./configLogic/images/texture_registry.h"
 #include "./components/system/pathUtils.h"
 #include "./configLogic/engineConf/engine_config.h"
+#include "components/network/websockets/websockets_client.h"
 
 #include "tools/stats_logger/stats_logger.h"
 
@@ -286,23 +287,10 @@ int main(int argc, char* argv[]) {
   uint32_t lastCursorToggle = SDL_GetTicks();
 
   HttpClient::Init();
+  WebSocketClient::Init();
 
   while (running) {
 
-    Uint32 currentTime = SDL_GetTicks();
-    float dt = (currentTime - lastTime) / 1000.0f;
-    lastTime = currentTime;
-
-    HttpClient::ProcessQueue(L);
-
-    if (TextureRegistry::ProcessUploads()) {
-      needsRedraw = true;
-      root->makeLayoutDirty();
-    }
-
-    Input::updateState();
-
-    // smart event handling
     if (SDL_WaitEventTimeout(&event, 16)) {
       do {
         if (event.type == SDL_QUIT) {
@@ -358,6 +346,29 @@ int main(int argc, char* argv[]) {
       } while (SDL_PollEvent(&event));
     }
 
+    // 2. TIME CALCULATION (Calculated AFTER waking up)
+    Uint32 currentTime = SDL_GetTicks();
+    float dt = (currentTime - lastTime) / 1000.0f;
+    lastTime = currentTime;
+
+    // 3. PROCESS BACKGROUND QUEUES (Instantly handles the data that woke us up)
+    if (HttpClient::ProcessQueue(L)) {
+      needsRedraw = true;
+      root->makeLayoutDirty(); 
+    }
+
+    if (WebSocketClient::ProcessQueue(L)) {
+      needsRedraw = true;
+      root->makeLayoutDirty(); 
+    }
+
+    if (TextureRegistry::ProcessUploads()) {
+      needsRedraw = true;
+      root->makeLayoutDirty();
+    }
+
+    // 4. UPDATE INPUT AND PHYSICS
+    Input::updateState();
     UI_UpdateSmoothScrolling(root, dt);
 
     if (root->isLayoutDirty || root->isPaintDirty) {
@@ -398,7 +409,6 @@ int main(int argc, char* argv[]) {
             lua_pushvalue(L, -3);           // Arg 2: App Table (copy from -3)
 
             if (lua_pcall(L, 2, 0, 0) != LUA_OK) {
-              // Now, if an error happens here, it prints gracefully!
               std::cerr << "VDOM Reconcile Error: " << lua_tostring(L, -1) << std::endl;
               lua_pop(L, 1); // Pop error
             }
@@ -431,6 +441,7 @@ int main(int argc, char* argv[]) {
         needsRedraw = true;
       }
     }
+    
     if (needsRedraw) {
 
       double currentLayoutTimeMs = 0.0;
@@ -496,6 +507,7 @@ int main(int argc, char* argv[]) {
   UI_ShutdownFonts();
   TextureRegistry::Cleanup();
   HttpClient::ShutDown();
+  WebSocketClient::ShutDown();
   freeTree(L, root);
   SDL_DestroyWindow(window);
   SDL_Quit();
