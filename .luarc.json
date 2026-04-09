@@ -1,0 +1,22 @@
+{
+  "runtime": {
+    "version": "Lua 5.4",
+    "path": [
+      "?.lua",
+      "?/init.lua",
+      "utils/?.lua",
+      "utils/?/init.lua",
+      "src/?.lua",
+      "src/?/init.lua"
+    ]
+  },
+  "diagnostics": {
+    "globals": ["vulpis", "useState", "setState", "Window", "App", "on_tick", "on_render"]
+  },
+  "workspace": {
+    "library": [
+      ".meta"
+    ],
+    "checkThirdParty": false
+  }
+}
