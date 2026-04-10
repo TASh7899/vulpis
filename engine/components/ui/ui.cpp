@@ -464,7 +464,7 @@ Node* buildNode(lua_State* L, int idx) {
   n->maxWidth = getInt("maxWidth", 99999);
 
   n->flexGrow = getFloat("flexGrow", 0.0f);
-  n->flexShrink  = getFloat("flexShrink", 0.0f);
+  n->flexShrink  = getFloat("flexShrink", 1.0f);
 
   n->flexWrap = parseFlexWrap(getString("flexWrap", "nowrap"));
 

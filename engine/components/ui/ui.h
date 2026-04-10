@@ -139,7 +139,7 @@ struct Node {
   std::vector<TextLine> computedLines;
   float computedLineHeight = 0.0f;
 
-  float flexShrink = 0.0f;
+  float flexShrink = 1.0f;
 
   float x = 0, y = 0;
   float w = 0, h = 0;
