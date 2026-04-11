@@ -58,7 +58,6 @@ uniform sampler2D texSampler;
 uniform sampler2DArray fontSampler;
 uniform int useArray;
 
-// NEW: Global Fragment Clip Uniforms (No Stencil Buffer Required)
 uniform vec4 uClipRect; 
 uniform vec3 uClipData;
 
@@ -71,9 +70,6 @@ void main() {
     vec4 finalOutput = vec4(0.0);
 
     if (fType > 0.5) { 
-        // -----------------------------------------------------------------
-        // TYPE 1.0: BASE RECT WITH BORDER
-        // -----------------------------------------------------------------
         vec2 halfSize = vec2(fBoxData.x, fBoxData.y) / 2.0;
         vec2 center = halfSize;
         float radius = min(fBoxData.z, min(halfSize.x, halfSize.y));
@@ -92,16 +88,13 @@ void main() {
             float borderDist = dist + borderW;
             float borderAlpha = smoothstep(edgeSoftness, -edgeSoftness, borderDist);
             
-            vec3 rgb = mix(fBorderColor.rgb, fColor.a == 0.0 ? fBorderColor.rgb : fColor.rgb, borderAlpha);
+            vec3 rgb = mix(fBorderColor.rgb, fColor.a < 0.001 ? fBorderColor.rgb : fColor.rgb, borderAlpha);
             float a = mix(fBorderColor.a, fColor.a, borderAlpha);
             finalColor = vec4(rgb, a);
         }
         
         finalOutput = finalColor * vec4(1.0, 1.0, 1.0, alpha);
     } else {
-        // -----------------------------------------------------------------
-        // TYPE 0.0: IMAGES & TEXT
-        // -----------------------------------------------------------------
         vec4 texColor;
         if (useArray == 1) {
             float mask = texture(fontSampler, fTextCoord).r;
@@ -132,9 +125,6 @@ void main() {
         finalOutput = fColor * texColor * vec4(1.0, 1.0, 1.0, alpha);
     }
 
-    // -----------------------------------------------------------------
-    // APPLY GLOBAL FRAGMENT CLIP (Mathematically Flawless)
-    // -----------------------------------------------------------------
     if (uClipData.z > 0.5) {
         vec2 clipHalfSize = vec2(uClipRect.z, uClipRect.w) * 0.5;
         vec2 clipCenter = vec2(uClipRect.x, uClipRect.y) + clipHalfSize;

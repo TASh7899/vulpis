@@ -386,7 +386,7 @@ namespace VDOM {
 
     // flexbox - alignItems - justifyContent
     update(n->flexGrow, getFloatProp(L, "flexGrow", 0.0f), layoutChanged);
-    update(n->flexShrink, getFloatProp(L, "flexShrink", 1.0f), layoutChanged);
+    update(n->flexShrink, getFloatProp(L, "flexShrink", 0.0f), layoutChanged);
     update(n->alignItems, parseAlign(getStringProp(L, "alignItems", "start")), layoutChanged);
     update(n->textAlign, parseTextAlign(getStringProp(L, "textAlign", "left")), layoutChanged);
 

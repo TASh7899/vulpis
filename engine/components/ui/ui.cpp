@@ -464,7 +464,7 @@ Node* buildNode(lua_State* L, int idx) {
   n->maxWidth = getInt("maxWidth", 99999);
 
   n->flexGrow = getFloat("flexGrow", 0.0f);
-  n->flexShrink  = getFloat("flexShrink", 1.0f);
+  n->flexShrink  = getFloat("flexShrink", 0.0f);
 
   n->flexWrap = parseFlexWrap(getString("flexWrap", "nowrap"));
 
@@ -642,13 +642,11 @@ void measure(Node* n) {
   if (n->type == "text") {
     computeTextLayout(n);
 
-    // If height isn't explicitly fixed in Lua, calculate it from the lines
     if (n->heightStyle.value == 0) {
-      n->h = (n->computedLines.size() * n->computedLineHeight) + n->paddingTop + n->paddingBottom;
+      n->h = n->contentH;
     }
-    // If width isn't fixed, you can also calculate max line width here
     if (n->widthStyle.value == 0) {
-      // (Optional logic to set n->w based on longest line)
+      n->w = n->contentW;
     }
   }
 
@@ -903,18 +901,6 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     }
   }
 
-  // BORDER OVERLAY
-  if (n->borderWidth > 0.0f) {
-    Color bColor = {n->borderColor.r, n->borderColor.g, n->borderColor.b, (uint8_t)(n->borderColor.a * alphaMultiplier)};
-    list.push(DrawRectCommand{
-        {renderX, renderY, n->w, n->h},
-        {0, 0, 0, 0}, // Transparent background so we don't block the image
-        n->borderRadius,
-        n->borderWidth,
-        bColor
-        });
-  }
-
   if (n->type == "text") {
     Font* font = n->font ? n->font : UI_GetFontById(n->fontId);
     if (font) {
@@ -1066,9 +1052,13 @@ std::vector<Node*> sortedChildren = n->children;
         });
 
     float pad = 2.0f;
+    float thumbW = sb.trackW - (pad * 2.0f);
+    float thumbH = sb.thumbH - (pad * 2.0f);
+
     list.push(DrawRectCommand{
         {sb.trackX + pad + totalOffsetX, sb.thumbY + pad + totalOffsetY, sb.trackW - (pad * 2.0f), sb.thumbH - (pad * 2.0f)},
-        {180, 180, 180, thumbAlpha}
+        {180, 180, 180, thumbAlpha},
+        thumbW / 2.0f
         });
   }
 
@@ -1290,7 +1280,8 @@ void computeTextLayout(Node* n) {
 
   n->computedLineHeight = (float)n->font->GetLogicalLineHeight();
 
-  float maxWidth = n->wordWrap ? (n->w - (n->paddingLeft + n->paddingRight)) : 999999.0f;
+  float innerW = n->w - (n->paddingLeft + n->paddingRight);
+  float maxWidth = (n->wordWrap && innerW > 0) ? innerW : 999999.0f;
 
   const auto& codepoints = n->codepoints;
   n->computedLines = n->font->CalculateWordWrap(codepoints, maxWidth);
@@ -1426,18 +1417,18 @@ ScrollbarMetrics Node::getScrollbarMetrics() {
   }
   m.isVisible = true;
   m.trackW = 10.0f;
-  m.trackX = this->x + this->w - m.trackW;
-  m.trackY = this->y;
-  m.trackH = this->h;
+  m.trackX = this->x + this->w - m.trackW - this->borderWidth;
+  m.trackY = this->y + this->borderWidth;
+  m.trackH = this->h - (this->borderWidth * 2.0f);
 
   float thumbMinH = 20.0f;
   float visibleRatio = this->h / this->contentH;
-  m.thumbH = std::max(thumbMinH, visibleRatio * this->h);
+  m.thumbH = std::max(thumbMinH, visibleRatio * m.trackH);
 
   m.maxScrollY = this->contentH - this->h;
   float scrollPct = this->scrollY / m.maxScrollY;
 
-  m.thumbY = this->y + (scrollPct * (this->h - m.thumbH));
+  m.thumbY = m.trackY + (scrollPct * (m.trackH - m.thumbH));
 
   return m;
 }

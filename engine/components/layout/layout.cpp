@@ -36,6 +36,12 @@ void DefaultLayoutSolver::measure(Node* n) {
     if (!n->children.empty()) contentW += n->spacing * (n->children.size() - 1);
   }
 
+  else if (n->type == "text") {
+    computeTextLayout(n);
+    contentW = n->contentW - n->paddingLeft - n->paddingRight;
+    contentH = n->contentH - n->paddingTop - n->paddingBottom;
+  }
+
   contentW += n->paddingLeft + n->paddingRight;
   contentH += n->paddingTop + n->paddingBottom;
 
