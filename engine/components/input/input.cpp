@@ -266,6 +266,14 @@ namespace Input {
         }
 
         int textIdx = getTextIndexAtCoords(activeDragNode, mx, my);
+
+        // selection support when mouse is in motion and dragging
+        if (activeDragNode->allowSelection && activeDragNode->type == "text") {
+          activeDragNode->selectionEnd = textIdx;
+          activeDragNode->cursorPosition = textIdx;
+          activeDragNode->makePaintDirty();
+        }
+
         fireDragEvent(L, activeDragNode->onDragRef, dx, dy, mx, my, textIdx);
       }
 
@@ -313,6 +321,7 @@ namespace Input {
     else if (event.type == SDL_MOUSEWHEEL) {
       int mx, my;
       SDL_GetMouseState(&mx, &my);
+
       Node* target = hitTest(root, mx, my);
 
       while (target) {
@@ -324,26 +333,12 @@ namespace Input {
             float scrollSpeed = 40.0f;
             target->scrollbarTimer = 1.5f;
 
-            // Use precise floating-point scroll deltas if using modern SDL2
-#if SDL_VERSION_ATLEAST(2, 0, 18)
-            float wy = event.wheel.preciseY;
-            float wx = event.wheel.preciseX;
-#else
-            float wy = (float)event.wheel.y;
-            float wx = (float)event.wheel.x;
-#endif
-
-            // SDL MOUSEWHEEL can be flipped by OS settings
-            if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
-              wy *= -1.0f;
-              wx *= -1.0f;
-            }
-
-            target->targetScrollY -= wy * scrollSpeed;
-            target->targetScrollX -= wx * scrollSpeed;
+            target->targetScrollY -= event.wheel.y * scrollSpeed;
+            target->targetScrollX -= event.wheel.x * scrollSpeed;
 
             target->targetScrollX = std::clamp(target->targetScrollX, 0.0f, maxScrollX);
             target->targetScrollY = std::clamp(target->targetScrollY, 0.0f, maxScrollY);
+
             break;
           }
         }
@@ -436,7 +431,8 @@ namespace Input {
 
         Node* dragCheck = target;
         while (dragCheck) {
-          if (dragCheck->isDraggable || dragCheck->onDragRef != -2 || dragCheck->onDragStartRef != -2) {
+          // Only trigger selection drag logic if it is explicitly a text node!
+          if (dragCheck->isDraggable || dragCheck->onDragRef != -2 || dragCheck->onDragStartRef != -2 || (dragCheck->allowSelection && dragCheck->type == "text")) {
             activeDragNode = dragCheck;
             activeDragNode->isDragging = true;
             activeDragNode->lastCursorPosition = -1;
@@ -444,9 +440,52 @@ namespace Input {
             dragInitialMouseY = my;
 
             int textIndex = getTextIndexAtCoords(activeDragNode, mx, my);
+
+            if (activeDragNode->allowSelection && activeDragNode->type == "text") {
+              SDL_Keymod mod = SDL_GetModState();
+              bool isShift = mod & KMOD_SHIFT;
+
+              if (event.button.clicks >= 3) {
+                // Triple click: Select All
+                activeDragNode->selectionStart = 0;
+                activeDragNode->selectionEnd = activeDragNode->codepoints.size();
+                activeDragNode->cursorPosition = activeDragNode->codepoints.size();
+              } else if (event.button.clicks == 2) {
+                // Double click: Select Word
+                int start = textIndex;
+                int end = textIndex;
+                const auto& cps = activeDragNode->codepoints;
+                int maxLen = (int)cps.size();
+
+                while (start > 0 && cps[start - 1] != ' ' && cps[start - 1] != '\n') start--;
+                while (end < maxLen && cps[end] != ' ' && cps[end] != '\n') end++;
+
+                activeDragNode->selectionStart = start;
+                activeDragNode->selectionEnd = end;
+                activeDragNode->cursorPosition = end;
+              } else if (isShift) {
+                // Shift + Click expands the current selection
+                if (activeDragNode->selectionStart == -1) {
+                  activeDragNode->selectionStart = (activeDragNode->cursorPosition != -1) ? activeDragNode->cursorPosition : 0;
+                }
+                activeDragNode->selectionEnd = textIndex;
+                activeDragNode->cursorPosition = textIndex;
+              } else {
+                // Standard single click
+                activeDragNode->selectionStart = textIndex;
+                activeDragNode->selectionEnd = textIndex;
+                activeDragNode->cursorPosition = textIndex;
+              }
+              activeDragNode->makePaintDirty();
+            }
+
             fireMouseEvent(L, activeDragNode->onDragStartRef, mx, my, textIndex, event.button.clicks);
-            eventConsumed = true;
-            break; // Stop bubbling up
+
+            if (activeDragNode->isDraggable || activeDragNode->onDragRef != -2 || activeDragNode->onDragStartRef != -2) {
+              eventConsumed = true;
+            }
+
+            break;
           }
           dragCheck = dragCheck->parent;
         }
@@ -488,6 +527,47 @@ namespace Input {
 
     else if (event.type == SDL_KEYDOWN) {  
       Node* focusedNode = findFocusedNode(root);
+      if (focusedNode) {
+        if (focusedNode->allowSelection && focusedNode->type == "text") {
+          SDL_Keymod mod = SDL_GetModState();
+          bool isCtrl = (mod & KMOD_CTRL) || (mod & KMOD_GUI);
+
+          if (isCtrl && event.key.keysym.sym == SDLK_c) {
+            int selMin = std::min(focusedNode->selectionStart, focusedNode->selectionEnd);
+            int selMax = std::max(focusedNode->selectionStart, focusedNode->selectionEnd);
+
+            if (selMin >= 0 && selMax >= 0 && selMin != selMax) {
+              std::string clipboardData = "";
+              for (int i = selMin; i < selMax && i < (int)focusedNode->codepoints.size(); i++) {
+                uint32_t cp = focusedNode->codepoints[i];
+                if (cp <= 0x7F) { clipboardData += (char)cp; } 
+                else if (cp <= 0x7FF) {
+                  clipboardData += (char)(0xC0 | ((cp >> 6) & 0x1F));
+                  clipboardData += (char)(0x80 | (cp & 0x3F));
+                } else if (cp <= 0xFFFF) {
+                  clipboardData += (char)(0xE0 | ((cp >> 12) & 0x0F));
+                  clipboardData += (char)(0x80 | ((cp >> 6) & 0x3F));
+                  clipboardData += (char)(0x80 | (cp & 0x3F));
+                } else {
+                  clipboardData += (char)(0xF0 | ((cp >> 18) & 0x07));
+                  clipboardData += (char)(0x80 | ((cp >> 12) & 0x3F));
+                  clipboardData += (char)(0x80 | ((cp >> 6) & 0x3F));
+                  clipboardData += (char)(0x80 | (cp & 0x3F));
+                }
+              }
+              SDL_SetClipboardText(clipboardData.c_str());
+            }
+          }
+          else if (isCtrl && event.key.keysym.sym == SDLK_a) {
+            focusedNode->selectionStart = 0;
+            focusedNode->selectionEnd = focusedNode->codepoints.size();
+            focusedNode->cursorPosition = focusedNode->codepoints.size();
+            focusedNode->makePaintDirty();
+          }
+
+        }
+      }
+
       if (focusedNode && focusedNode->onKeyDownRef != -2) {
         focusedNode->lastCursorPosition = -1;
         lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onKeyDownRef);

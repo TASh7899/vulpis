@@ -299,15 +299,21 @@ namespace VDOM {
           newTextColor = {sc.r, sc.g, sc.b, sc.a};
         } 
         else if (lua_istable(L, -1)) {
-          lua_rawgeti(L, -1, 1); int r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-          lua_rawgeti(L, -1, 2); int g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-          lua_rawgeti(L, -1, 3); int b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+          lua_rawgeti(L, -1, 1); int r = luaL_optinteger(L, -1, 0); lua_pop(L, 1);
+          lua_rawgeti(L, -1, 2); int g = luaL_optinteger(L, -1, 0); lua_pop(L, 1);
+          lua_rawgeti(L, -1, 3); int b = luaL_optinteger(L, -1, 0); lua_pop(L, 1);
           lua_rawgeti(L, -1, 4); int a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
           newTextColor = {(Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a};
         }
 
         if (n->textColor != newTextColor) {
           n->textColor = newTextColor;
+          paintChanged = true;
+        }
+      } else {
+        Color defaultTextColor = {0, 0, 0, 255}; 
+        if (n->textColor != defaultTextColor) {
+          n->textColor = defaultTextColor;
           paintChanged = true;
         }
       }
@@ -340,18 +346,18 @@ namespace VDOM {
 
     lua_getfield(L, -1, "borderColor");
     if (lua_isstring(L, -1)) {
-        SDL_Color newCol = parseHexColor(lua_tostring(L, -1));
-        update(n->borderColor, newCol, paintChanged);
+      SDL_Color newCol = parseHexColor(lua_tostring(L, -1));
+      update(n->borderColor, newCol, paintChanged);
     } else if (lua_istable(L, -1)) {
-        lua_rawgeti(L, -1, 1); int r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 2); int g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 3); int b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        lua_rawgeti(L, -1, 4); int a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-        SDL_Color newCol = {(Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a};
-        update(n->borderColor, newCol, paintChanged);
+      lua_rawgeti(L, -1, 1); int r = luaL_optinteger(L, -1, 0); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 2); int g = luaL_optinteger(L, -1, 0); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 3); int b = luaL_optinteger(L, -1, 0); lua_pop(L, 1);
+      lua_rawgeti(L, -1, 4); int a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+      SDL_Color newCol = {(Uint8)r, (Uint8)g, (Uint8)b, (Uint8)a};
+      update(n->borderColor, newCol, paintChanged);
     } else if (lua_isnil(L, -1)) {
-        SDL_Color newCol = {0,0,0,0};
-        update(n->borderColor, newCol, paintChanged);
+      SDL_Color newCol = {0,0,0,0};
+      update(n->borderColor, newCol, paintChanged);
     }
     lua_pop(L, 1);
 
@@ -417,9 +423,6 @@ namespace VDOM {
       paintChanged = true;
     }
 
-
-
-
     std::string overflow = getStringProp(L, "overflow", "visible");
     bool newOverflowHidden = (overflow != "visible");
     bool newOverflowScroll = (overflow == "scroll" || overflow == "auto");
@@ -432,7 +435,7 @@ namespace VDOM {
 
     std::string autoScrollStr = getStringProp(L, "autoScroll", "none");
     AutoScroll newAutoScroll = AutoScroll::None;
-    
+
     if (autoScrollStr == "bottom") newAutoScroll = AutoScroll::Bottom;
     else if (autoScrollStr == "top") newAutoScroll = AutoScroll::Top;
 
@@ -511,6 +514,21 @@ namespace VDOM {
       n->isDraggable = false;
     }
     lua_pop(L, 1);
+
+
+    // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+    // ╏ text selection flag ╏
+    // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+    lua_getfield(L, idx, "allowSelection");
+    if (!lua_isnil(L, -1)) {
+      n->allowSelection = lua_toboolean(L, -1);
+    }
+    lua_pop(L, 1);
+
+    if (n->allowSelection && n->type == "text") {
+      n->isFocusable = true;
+    }
+
 
     lua_getfield(L, idx, "isFocused");
     if (!lua_isnil(L, -1)) {

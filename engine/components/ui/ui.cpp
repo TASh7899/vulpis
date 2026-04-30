@@ -320,9 +320,9 @@ void NodeParseText(Node* n, lua_State* L) {
     n->textColor = {(uint8_t)sc.r, (uint8_t)sc.g, (uint8_t)sc.b, (uint8_t)sc.a};
   }
   else if (lua_istable(L, -1)) {
-    lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-    lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
-    lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
+    lua_rawgeti(L, -1, 1); n->textColor.r = luaL_optinteger(L, -1, 0); lua_pop(L, 1);
+    lua_rawgeti(L, -1, 2); n->textColor.g = luaL_optinteger(L, -1, 0); lua_pop(L, 1);
+    lua_rawgeti(L, -1, 3); n->textColor.b = luaL_optinteger(L, -1, 0); lua_pop(L, 1);
     lua_rawgeti(L, -1, 4); n->textColor.a = luaL_optinteger(L, -1, 255); lua_pop(L, 1);
   }
   lua_pop(L, 1);
@@ -365,7 +365,12 @@ Node* buildNode(lua_State* L, int idx) {
   lua_pop(L, 1);
 
   lua_getfield(L, idx, "style");
-  bool hasStyle = lua_istable(L, -1);
+  if (!lua_istable(L, -1)) {
+    lua_pop(L, 1);
+    lua_newtable(L);
+  }
+
+  bool hasStyle = true;
 
   auto getInt = [&](const char* key, int defaultVal) {
     int val = defaultVal;
@@ -546,10 +551,23 @@ Node* buildNode(lua_State* L, int idx) {
   if (lua_isboolean(L, -1)) n->isFocused = lua_toboolean(L, -1);
   lua_pop(L, 1);
 
-
   lua_getfield(L, idx, "cursorPosition");
   if (lua_isnumber(L, -1)) n->cursorPosition = lua_tointeger(L, -1);
   lua_pop(L, 1);
+
+
+// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+// ╏ text selection flag ╏
+// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  lua_getfield(L, idx, "allowSelection");
+  if (!lua_isnil(L, -1)) {
+    n->allowSelection = lua_toboolean(L, -1);
+  }
+  lua_pop(L, 1);
+
+  if (n->allowSelection && n->type == "text") {
+    n->isFocusable = true;
+  }
 
   lua_getfield(L, idx, "children");
   if (lua_istable(L, -1)) {
@@ -683,23 +701,23 @@ void layout(Node* n, int x, int y) {
 
 void TranslateRenderCommand(RenderCommand& cmd, float dx, float dy) {
   std::visit([dx, dy](auto& c){
-    using T = std::decay_t<decltype(c)>;
-    if constexpr (std::is_same_v<T, DrawRectCommand>) {
+      using T = std::decay_t<decltype(c)>;
+      if constexpr (std::is_same_v<T, DrawRectCommand>) {
       c.rect.x += dx;
       c.rect.y += dy;
-    } else if constexpr (std::is_same_v<T, DrawTextCommand>) {
+      } else if constexpr (std::is_same_v<T, DrawTextCommand>) {
       c.x += dx;
       c.y += dy;
-    } else if constexpr (std::is_same_v<T, DrawImageCommand>) {
+      } else if constexpr (std::is_same_v<T, DrawImageCommand>) {
       c.rect.x += dx;
       c.rect.y += dy;
       c.nodeRect.x += dx;
       c.nodeRect.y += dy;
-    } else if constexpr (std::is_same_v<T, PushClipCommand>) {
+      } else if constexpr (std::is_same_v<T, PushClipCommand>) {
       c.rect.x += dx;
       c.rect.y += dy;
-    }
-  }, cmd);
+      }
+      }, cmd);
 }
 
 
@@ -762,10 +780,10 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
         n->borderRadius,
         n->borderWidth,
         bColor
-    });
+        });
   }
 
-// BACKGROUND IMAGE OR SKELETON LOADER
+  // BACKGROUND IMAGE OR SKELETON LOADER
   if (n->bgTextureId != 0) {
     if (!TextureRegistry::IsTextureLoaded(n->bgTextureId)) {
       // Draw pulsating skeleton loader
@@ -1031,10 +1049,10 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
     }
   }
 
-std::vector<Node*> sortedChildren = n->children;
+  std::vector<Node*> sortedChildren = n->children;
   std::stable_sort(sortedChildren.begin(), sortedChildren.end(), [](Node* a, Node* b) {
       return a->zIndex < b->zIndex;
-  });
+      });
 
   for (Node* c : sortedChildren) {
     renderNodePass(c, list, totalOffsetX - n->scrollX, totalOffsetY - n->scrollY, isDragPass, treatAsDragged, parentAlpha);

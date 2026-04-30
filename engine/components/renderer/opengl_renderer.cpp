@@ -264,7 +264,7 @@ void OpenGLRenderer::beginFrame(const DamageRect& damage) {
     glDisable(GL_SCISSOR_TEST);
   }
 
-  glClearColor(0.12f, 0.12f, 0.12f, 1.0f);
+  glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT); 
 
   glUseProgram(shaderProgram);

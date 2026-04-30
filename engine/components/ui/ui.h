@@ -122,7 +122,7 @@ struct Node {
   std::string objectFit = "fill";
   int fontId = 0;
   Font* font = nullptr;
-  Color textColor = {255, 255, 255, 255};
+  Color textColor = {0, 0, 0, 255};
 
   std::string fontFamily;
   int fontSize = 0;
@@ -181,6 +181,8 @@ struct Node {
   int onFocusRef = -2;
   int onBlurRef = -2;
 
+  // allowSelection enables text selection (enabled by default)
+  bool allowSelection = true;
 
   // Cursor state for rendering
   int cursorPosition = -1; // -1 means no cursor/unfocused
@@ -226,7 +228,7 @@ struct Node {
 
   ScrollbarMetrics getScrollbarMetrics();
 
-  SDL_Color color = {0,0,0,0};
+  SDL_Color color = {255, 255, 255, 255};
   bool hasBackground = false;
 
   // border attributes
