@@ -80,8 +80,6 @@ namespace Layout {
 
         if (n->type == "text") {
           YGNodeSetMeasureFunc(yogaNode, textMeasure);
-          YGNodeStyleSetFlexShrink(yogaNode, 0.0f);
-          YGNodeStyleSetFlexGrow(yogaNode, 0.0f);
         }
 
         if (n->type == "vbox") {

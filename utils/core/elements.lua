@@ -1,9 +1,5 @@
 local elements = {}
 
--------------------------------------------------------------------------------
--- 1. REACT-LIKE PROP TYPES (For IntelliSense)
--------------------------------------------------------------------------------
-
 ---@class VulpisProps
 ---@field id? string
 ---@field key? string
@@ -27,11 +23,6 @@ local elements = {}
 ---@field children? VulpisNode[]
 ---@field style? VulpisStyle Fallback for explicit verbose styles
 
--------------------------------------------------------------------------------
--- 2. CORE HELPERS
--------------------------------------------------------------------------------
-
--- Helper to merge style tables (supports passing nil safely)
 function elements.mergeStyles(...)
 	local res = {}
 	for _, styleObj in ipairs({ ... }) do
@@ -180,7 +171,6 @@ end
 ---@param optionalProps? table
 ---@return VulpisNode
 function elements.Text(props, optionalStyle, optionalProps)
-	-- Robustly handle strings and numbers
 	if type(props) == "string" or type(props) == "number" then
 		local textString = tostring(props)
 		props = type(optionalProps) == "table" and optionalProps or {}
