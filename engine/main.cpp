@@ -367,8 +367,6 @@ int main(int argc, char* argv[]) {
       root->makeLayoutDirty();
     }
 
-    // 4. UPDATE INPUT AND PHYSICS
-    Input::updateState();
     UI_UpdateSmoothScrolling(root, dt);
 
     if (root->isLayoutDirty || root->isPaintDirty) {
@@ -502,6 +500,8 @@ int main(int argc, char* argv[]) {
       }
 
     }
+
+    Input::updateState();
   }
 
   UI_ShutdownFonts();

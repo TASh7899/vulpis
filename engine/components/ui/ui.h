@@ -182,7 +182,7 @@ struct Node {
   int onBlurRef = -2;
 
   // allowSelection enables text selection (enabled by default)
-  bool allowSelection = true;
+  bool allowSelection = false;
 
   // Cursor state for rendering
   int cursorPosition = -1; // -1 means no cursor/unfocused

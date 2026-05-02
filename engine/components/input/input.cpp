@@ -422,13 +422,19 @@ namespace Input {
 
         if (!focusHandle) {
           Node* focusedNode = findFocusedNode(root);
-          if (focusedNode && focusedNode->onBlurRef != -2) {
-            lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onBlurRef);
-            if (lua_isfunction(L, -1)) lua_pcall(L, 0, 0, 0);
-            else lua_pop(L, 1);
+          if (focusedNode) {
+            focusedNode->isFocused = false; 
+
+            if (focusedNode->onBlurRef != -2) {
+              lua_rawgeti(L, LUA_REGISTRYINDEX, focusedNode->onBlurRef);
+              if (lua_isfunction(L, -1)) {
+                lua_pcall(L, 0, 0, 0);
+              } else {
+                lua_pop(L, 1);
+              }
+            }
           }
         }
-
         Node* dragCheck = target;
         while (dragCheck) {
           // Only trigger selection drag logic if it is explicitly a text node!

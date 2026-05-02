@@ -49,7 +49,6 @@ function TextInput(props)
 	local isEmpty = currentText == ""
 	local displayText = isEmpty and (props.placeholder or " ") or currentText
 
-	-- [!] FIX: A mutable reference that persists across multiple rapid-fire events in a single frame.
 	local live = {
 		text = currentText,
 		cursor = curPos,
@@ -246,9 +245,7 @@ function TextInput(props)
 				end
 			end
 
-			-- Only dispatch state updates if something actually changed
 			if newText ~= live.text or newPos ~= live.cursor or newAnchor ~= live.anchor then
-				-- [!] Update live ref synchronously so the next event in this frame uses these values
 				local oldText = live.text
 				live.text = newText
 				live.cursor = newPos
