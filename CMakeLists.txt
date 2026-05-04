@@ -47,6 +47,7 @@ add_executable(vulpis
   engine/components/text/font.cpp
   engine/components/system/pathUtils.cpp
   engine/components/system/secure_storage.cpp
+  engine/components/system/system_bindings.cpp
   engine/components/network/http_client.cpp
   engine/components/network/websockets/websockets_client.cpp
   engine/configLogic/font/font_registry.cpp
