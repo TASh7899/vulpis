@@ -405,17 +405,43 @@ namespace VDOM {
     update(n->spacing, gapVal, layoutChanged);
 
     // Box Model (margin / padding)
-    auto applyBoxModel = [&](const char* base, const char* t, const char* b, const char* l, const char* r, int& vBase, int& vT, int& vB, int& vL, int& vR) {
-      int val = getIntProp(L, base, 0);
-      update(vBase, val, layoutChanged);
-      update(vT, getIntProp(L, t, val), layoutChanged);
-      update(vB, getIntProp(L, b, val), layoutChanged);
-      update(vL, getIntProp(L, l, val), layoutChanged);
-      update(vR, getIntProp(L, r, val), layoutChanged);
+    auto applyBoxModel = [&](
+        const char* longAll, const char* shortAll,
+        const char* shortX, const char* shortY,
+        const char* longT, const char* shortT,
+        const char* longB, const char* shortB,
+        const char* longL, const char* shortL,
+        const char* longR, const char* shortR,
+        int& vT, int& vB, int& vL, int& vR) {
+
+      // 1. Resolve base fallbacks
+      int baseVal = getIntProp(L, shortAll, getIntProp(L, longAll, 0));
+      int valX = getIntProp(L, shortX, baseVal);
+      int valY = getIntProp(L, shortY, baseVal);
+
+      // 2. Resolve specific sides and apply updates
+      update(vT, getIntProp(L, shortT, getIntProp(L, longT, valY)), layoutChanged);
+      update(vB, getIntProp(L, shortB, getIntProp(L, longB, valY)), layoutChanged);
+      update(vL, getIntProp(L, shortL, getIntProp(L, longL, valX)), layoutChanged);
+      update(vR, getIntProp(L, shortR, getIntProp(L, longR, valX)), layoutChanged);
     };
 
-    applyBoxModel("padding", "paddingTop", "paddingBottom", "paddingLeft", "paddingRight", n->padding, n->paddingTop, n->paddingBottom, n->paddingLeft, n->paddingRight);
-    applyBoxModel("margin", "marginTop", "marginBottom", "marginLeft", "marginRight", n->margin, n->marginTop, n->marginBottom, n->marginLeft, n->marginRight);
+    // Apply Padding
+    applyBoxModel(
+        "padding", "p", "px", "py", 
+        "paddingTop", "pt", "paddingBottom", "pb", 
+        "paddingLeft", "pl", "paddingRight", "pr", 
+        n->paddingTop, n->paddingBottom, n->paddingLeft, n->paddingRight
+        );
+
+    // Apply Margin
+    applyBoxModel(
+        "margin", "m", "mx", "my", 
+        "marginTop", "mt", "marginBottom", "mb", 
+        "marginLeft", "ml", "marginRight", "mr", 
+        n->marginTop, n->marginBottom, n->marginLeft, n->marginRight
+        );
+
 
     std::string newFit = getStringProp(L, "fit", "fill");
     if (n->objectFit != newFit) {

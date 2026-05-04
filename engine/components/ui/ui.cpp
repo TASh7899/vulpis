@@ -431,19 +431,30 @@ Node* buildNode(lua_State* L, int idx) {
   n->spacing = getInt("gap", getInt("spacing", 0));
   n->zIndex = getInt("zIndex", 0);
 
-  int p = getInt("padding", 0);
-  n->padding       = p;
-  n->paddingTop    = getInt("paddingTop", p);
-  n->paddingBottom = getInt("paddingBottom", p);
-  n->paddingLeft   = getInt("paddingLeft", p);
-  n->paddingRight  = getInt("paddingRight", p);
+  // --- PADDING ---
+  // Base values (p falls back to padding, defaults to 0)
+  int p = getInt("p", getInt("padding", 0));
+  int px = getInt("px", p);
+  int py = getInt("py", p);
 
-  int m = getInt("margin", 0);
-  n->margin       = m;
-  n->marginTop    = getInt("marginTop", m);
-  n->marginBottom = getInt("marginBottom", m);
-  n->marginLeft   = getInt("marginLeft", m);
-  n->marginRight  = getInt("marginRight", m);
+  // Specific sides (pt falls back to paddingTop, falls back to py)
+  n->paddingTop    = getInt("pt", getInt("paddingTop", py));
+  n->paddingBottom = getInt("pb", getInt("paddingBottom", py));
+  n->paddingLeft   = getInt("pl", getInt("paddingLeft", px));
+  n->paddingRight  = getInt("pr", getInt("paddingRight", px));
+
+
+  // --- MARGIN ---
+  // Base values (m falls back to margin, defaults to 0)
+  int m = getInt("m", getInt("margin", 0));
+  int mx = getInt("mx", m);
+  int my = getInt("my", m);
+
+  // Specific sides (mt falls back to marginTop, falls back to my)
+  n->marginTop    = getInt("mt", getInt("marginTop", my));
+  n->marginBottom = getInt("mb", getInt("marginBottom", my));
+  n->marginLeft   = getInt("ml", getInt("marginLeft", mx));
+  n->marginRight  = getInt("mr", getInt("marginRight", mx));
 
 
   n->borderRadius = getFloat("borderRadius", 0.0f);

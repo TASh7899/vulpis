@@ -3,25 +3,13 @@ local elements = {}
 ---@class VulpisProps
 ---@field id? string
 ---@field key? string
----@field w? number|string Width (e.g., 200 or "100%")
----@field h? number|string Height
----@field p? integer Padding (all sides)
----@field px? integer Padding Horizontal (Left/Right)
----@field py? integer Padding Vertical (Top/Bottom)
----@field m? integer Margin (all sides)
----@field bg? VulpisColor Background color (Hex or table)
----@field rounded? number Border radius
----@field center? boolean Automatically center all children
----@field row? boolean Lay out children horizontally (like Flex Row)
----@field justify? FlexJustify Main-axis alignment
----@field align? FlexAlign Cross-axis alignment
----@field gap? integer Spacing between children
 ---@field onClick? fun(mx: number, my: number)
 ---@field onRightClick? fun(mx: number, my: number)
 ---@field onMouseEnter? fun()
 ---@field onMouseLeave? fun()
 ---@field children? VulpisNode[]
----@field style? VulpisStyle Fallback for explicit verbose styles
+---@field style? VulpisStyle
+-- (You can add your native shorthands back to these annotations later!)
 
 function elements.mergeStyles(...)
 	local res = {}
@@ -48,7 +36,7 @@ function elements.mergeChildren(...)
 	return res
 end
 
--- Core property extractor: translates shorthand props to engine styles
+-- Core property extractor
 local function buildBaseNode(props, defaultType)
 	if type(props) ~= "table" then
 		props = {}
@@ -60,72 +48,16 @@ local function buildBaseNode(props, defaultType)
 		children = props.children or {},
 	}
 
-	-- 1. Translate Shorthand Props to C++ Engine Styles
-	if props.w then
-		node.style.w = props.w
-	end
-	if props.h then
-		node.style.h = props.h
-	end
-	if props.bg then
-		node.style.BGColor = props.bg
-	end
-	if props.rounded then
-		node.style.borderRadius = props.rounded
-	end
-	if props.gap then
-		node.style.spacing = props.gap
-	end
-	if props.justify then
-		node.style.justifyContent = props.justify
-	end
-	if props.align then
-		node.style.alignItems = props.align
-	end
-
-	if props.p then
-		node.style.padding = props.p
-	end
-	if props.px then
-		node.style.paddingLeft = props.px
-		node.style.paddingRight = props.px
-	end
-	if props.py then
-		node.style.paddingTop = props.py
-		node.style.paddingBottom = props.py
-	end
-	if props.m then
-		node.style.margin = props.m
-	end
-
-	if props.center then
-		node.style.alignItems = "center"
-		node.style.justifyContent = "center"
-	end
-
-	if props.row then
-		node.type = "hbox"
-	end
-
-	-- 2. Map over remaining props (events, ids, etc)
-	local styleKeys = {
-		w = true,
-		h = true,
-		bg = true,
-		rounded = true,
-		gap = true,
-		justify = true,
-		align = true,
-		p = true,
-		px = true,
-		py = true,
-		m = true,
-		center = true,
-		row = true,
+	-- Map over all remaining props and pass them directly to C++!
+	local reservedKeys = {
+		type = true,
+		style = true,
+		children = true,
+		text = true,
 	}
 
 	for k, v in pairs(props) do
-		if k ~= "type" and k ~= "style" and k ~= "children" and k ~= "text" and not styleKeys[k] then
+		if not reservedKeys[k] then
 			node[k] = v
 		end
 	end
@@ -143,7 +75,7 @@ function elements.Box(props)
 	if type(props) ~= "table" then
 		props = {}
 	end
-	return buildBaseNode(props, "vbox") -- Default to vbox, overridden if `row = true`
+	return buildBaseNode(props, "vbox")
 end
 
 ---@param props VulpisProps
@@ -183,7 +115,7 @@ function elements.Text(props, optionalStyle, optionalProps)
 	local node = buildBaseNode(props, "text")
 	node.text = props.text or ""
 
-	-- Map shorthand text styles
+	-- I left these Text shorthands here, but you can move them to C++ too if you want!
 	if props.color then
 		node.style.color = props.color
 	end
@@ -216,15 +148,10 @@ function elements.Button(props)
 		alignItems = "center",
 		justifyContent = "center",
 		borderRadius = 10,
-
-		-- Default text styles
 		color = "#000000",
 	}
 
-	-- Build the node to extract the shorthands into node.style
 	local node = buildBaseNode(props, "hbox")
-
-	-- Merge the user's unified style with the defaults
 	local mergedStyle = elements.mergeStyles(defaultStyle, node.style)
 
 	local textKeys = {
