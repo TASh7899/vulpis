@@ -16,3 +16,6 @@ if you didn't add --recursive do this afterwards
 ```
 git submodule update --init --recursive
 ```
+
+
+check out docs -> https://vulpis-website.vercel.app/
