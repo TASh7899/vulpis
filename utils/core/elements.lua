@@ -151,6 +151,13 @@ function elements.Button(props)
 		color = "#000000",
 	}
 
+	if props.style and (props.style.p or props.style.padding or props.style.px or props.style.py) then
+		defaultStyle.paddingTop = nil
+		defaultStyle.paddingBottom = nil
+		defaultStyle.paddingLeft = nil
+		defaultStyle.paddingRight = nil
+	end
+
 	local node = buildBaseNode(props, "hbox")
 	local mergedStyle = elements.mergeStyles(defaultStyle, node.style)
 

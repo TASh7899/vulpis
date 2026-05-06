@@ -96,6 +96,11 @@ bool WebSocketClient::ProcessQueue(lua_State *L) {
   for (const auto& ev : localQueue) {
     lua_rawgeti(L, LUA_REGISTRYINDEX, ev.callbackRef);
 
+    if (!lua_isfunction(L, -1)) {
+      lua_pop(L, 1);
+      continue;
+    }
+
     lua_newtable(L);
     lua_pushstring(L, ev.type.c_str());
     lua_setfield(L, -2, "type");
@@ -108,7 +113,7 @@ bool WebSocketClient::ProcessQueue(lua_State *L) {
       lua_pop(L, 1);
     }
 
-    if (ev.type == "close" || ev.type == "error") {
+    if (ev.type == "close") {
       luaL_unref(L, LUA_REGISTRYINDEX, ev.callbackRef);
     }
   }

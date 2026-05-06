@@ -45,7 +45,10 @@ int protected_reconcile(lua_State* L) {
 }
 
 int main(int argc, char* argv[]) {
+  #ifdef __linux__
   SDL_SetHint(SDL_HINT_VIDEODRIVER, "wayland,x11");
+  #endif
+
   if (SDL_Init(SDL_INIT_VIDEO) != 0) {
     std::cout << "SDL Init Failed: " << SDL_GetError() << std::endl;
     return 1;
