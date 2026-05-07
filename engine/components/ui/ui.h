@@ -76,10 +76,15 @@ enum class PositionType {
 };
 
 struct ScrollbarMetrics {
-  bool isVisible;
-  float trackX, trackY, trackW, trackH;
-  float thumbY, thumbH;
+  bool vVisible;
+  float vTrackX, vTrackY, vTrackW, vTrackH;
+  float vThumbY, vThumbH;
   float maxScrollY;
+
+  bool hVisible;
+  float hTrackX, hTrackY, hTrackW, hTrackH;
+  float hThumbX, hThumbW;
+  float maxScrollX;
 };
 
 struct DamageRect {

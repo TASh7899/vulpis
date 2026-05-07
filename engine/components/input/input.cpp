@@ -22,7 +22,8 @@
 
 namespace Input {
   static Node* draggedScrollbarNode = nullptr;
-  static float dragOffsetY = 0.0f;
+  static float dragOffset = 0.0f;
+  static bool draggedIsHorizontal = false;
   static Node* activeDragNode = nullptr;
   static int dragInitialMouseX = 0;
   static int dragInitialMouseY = 0;
@@ -240,15 +241,21 @@ namespace Input {
         draggedScrollbarNode->scrollbarTimer = 1.5f;
         ScrollbarMetrics sb = draggedScrollbarNode->getScrollbarMetrics();
 
-        if (sb.isVisible) {
-          float screenTrackY = sb.trackY + draggedScrollbarNode->cachedOffsetY;
-
-          float localY = (my - dragOffsetY) - screenTrackY;
-          float availableTrackSpace = sb.trackH - sb.thumbH;
-
-          if (availableTrackSpace > 0) {
-            float scrollPct = (localY - (sb.thumbH / 2.0f)) / availableTrackSpace;
-            draggedScrollbarNode->targetScrollY = std::clamp(scrollPct * sb.maxScrollY, 0.0f, sb.maxScrollY);
+        if (!draggedIsHorizontal && sb.vVisible) {
+          float screenTrackY = sb.vTrackY + draggedScrollbarNode->cachedOffsetY;
+          float localY = my - screenTrackY;
+          float availableSpace = sb.vTrackH - sb.vThumbH;
+          if (availableSpace > 0) {
+            float pct = ((localY - dragOffset) - (sb.vThumbH / 2.0f)) / availableSpace;
+            draggedScrollbarNode->targetScrollY = std::clamp(pct * sb.maxScrollY, 0.0f, sb.maxScrollY);
+          }
+        } else if (draggedIsHorizontal && sb.hVisible) {
+          float screenTrackX = sb.hTrackX + draggedScrollbarNode->cachedOffsetX;
+          float localX = mx - screenTrackX;
+          float availableSpace = sb.hTrackW - sb.hThumbW;
+          if (availableSpace > 0) {
+            float pct = ((localX - dragOffset) - (sb.hThumbW / 2.0f)) / availableSpace;
+            draggedScrollbarNode->targetScrollX = std::clamp(pct * sb.maxScrollX, 0.0f, sb.maxScrollX);
           }
         }
         return;
@@ -322,6 +329,14 @@ namespace Input {
       int mx, my;
       SDL_GetMouseState(&mx, &my);
 
+      float wheelX = event.wheel.x;
+      float wheelY = event.wheel.y;
+
+      if ((SDL_GetModState() & KMOD_SHIFT) && wheelX == 0.0f) {
+        wheelX = wheelY;
+        wheelY = 0.0f;
+      }
+
       Node* target = hitTest(root, mx, my);
 
       while (target) {
@@ -333,8 +348,8 @@ namespace Input {
             float scrollSpeed = 40.0f;
             target->scrollbarTimer = 1.5f;
 
-            target->targetScrollY -= event.wheel.y * scrollSpeed;
-            target->targetScrollX -= event.wheel.x * scrollSpeed;
+            target->targetScrollY -= wheelY * scrollSpeed;
+            target->targetScrollX -= wheelX * scrollSpeed;
 
             target->targetScrollX = std::clamp(target->targetScrollX, 0.0f, maxScrollX);
             target->targetScrollY = std::clamp(target->targetScrollY, 0.0f, maxScrollY);
@@ -359,32 +374,32 @@ namespace Input {
         while (curr) {
           ScrollbarMetrics sb = curr->getScrollbarMetrics();
 
-          if (sb.isVisible && curr->scrollbarOpacity > 0.0f) {
-            float screenTrackX = sb.trackX + curr->cachedOffsetX;
-            float screenTrackY = sb.trackY + curr->cachedOffsetY;
-
-            if (mx >= screenTrackX && mx <= screenTrackX + sb.trackW &&
-                my >= screenTrackY && my <= screenTrackY + sb.trackH) {
-
-              draggedScrollbarNode = curr;
-
-              float localY = my - sb.trackY;
-              float availableTrackSpace = sb.trackH - sb.thumbH;
-              float screenThumbY = sb.thumbY + curr->cachedOffsetY;
-
-              if (my >= screenThumbY && my <= screenThumbY + sb.thumbH) {
-                dragOffsetY = my - (screenThumbY + (sb.thumbH / 2.0f));
-              } else {
-                dragOffsetY = 0.0f; // Clicked empty track, snap center
+          if (curr->scrollbarOpacity > 0.0f) {
+            if (sb.vVisible) {
+              float sTrackX = sb.vTrackX + curr->cachedOffsetX;
+              float sTrackY = sb.vTrackY + curr->cachedOffsetY;
+              
+              if (mx >= sTrackX && mx <= sTrackX + sb.vTrackW && my >= sTrackY && my <= sTrackY + sb.vTrackH) {
+                draggedScrollbarNode = curr;
+                draggedIsHorizontal = false;
+                float sThumbY = sb.vThumbY + curr->cachedOffsetY;
+                dragOffset = (my >= sThumbY && my <= sThumbY + sb.vThumbH) ? my - (sThumbY + (sb.vThumbH / 2.0f)) : 0.0f;
+                eventConsumed = true;
+                break;
               }
+            }
 
-              if (availableTrackSpace > 0) {
-                float scrollPct = (localY - (sb.thumbH / 2.0f)) / availableTrackSpace;
-                curr->targetScrollY = std::clamp(scrollPct * sb.maxScrollY, 0.0f, sb.maxScrollY);
+            if (sb.hVisible) {
+              float sTrackX = sb.hTrackX + curr->cachedOffsetX;
+              float sTrackY = sb.hTrackY + curr->cachedOffsetY;
+              if (mx >= sTrackX && mx <= sTrackX + sb.hTrackW && my >= sTrackY && my <= sTrackY + sb.hTrackH ) {
+                draggedScrollbarNode = curr;
+                draggedIsHorizontal = true;
+                float sThumbX = sb.hThumbX + curr->cachedOffsetX;
+                dragOffset = (mx >= sThumbX && mx <= sThumbX + sb.hThumbW) ? mx - (sThumbX + (sb.hThumbW / 2.0f)) : 0.0f;
+                eventConsumed = true;
+                break;
               }
-
-              eventConsumed = true;
-              break;
             }
           }
           curr = curr->parent;

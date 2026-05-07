@@ -1072,24 +1072,35 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
 
   // Render Scrollbars
   ScrollbarMetrics sb = n->getScrollbarMetrics();
-  if (sb.isVisible && n->scrollbarOpacity > 0.0f) {
+  if (n->scrollbarOpacity > 0.0f) {
     uint8_t trackAlpha = (uint8_t)(180 * n->scrollbarOpacity * alphaMultiplier);
     uint8_t thumbAlpha = (uint8_t)(255 * n->scrollbarOpacity * alphaMultiplier);
-
-    list.push(DrawRectCommand{
-        {sb.trackX + totalOffsetX, sb.trackY + totalOffsetY, sb.trackW, sb.trackH},
-        {0, 0, 0, trackAlpha},
-        });
-
     float pad = 2.0f;
-    float thumbW = sb.trackW - (pad * 2.0f);
-    float thumbH = sb.thumbH - (pad * 2.0f);
 
-    list.push(DrawRectCommand{
-        {sb.trackX + pad + totalOffsetX, sb.thumbY + pad + totalOffsetY, sb.trackW - (pad * 2.0f), sb.thumbH - (pad * 2.0f)},
-        {180, 180, 180, thumbAlpha},
-        thumbW / 2.0f
-        });
+    if (sb.vVisible) {
+      list.push(DrawRectCommand{
+          {sb.vTrackX + totalOffsetX, sb.vTrackY + totalOffsetY, sb.vTrackW, sb.vTrackH},
+          {0, 0, 0, trackAlpha},
+          });
+      
+      list.push(DrawRectCommand{
+          {sb.vTrackX + pad + totalOffsetX, sb.vThumbY + pad + totalOffsetY, sb.vTrackW - (pad * 2.0f), sb.vThumbH - (pad * 2.0f)},
+          {180, 180, 180, thumbAlpha},
+          (sb.vTrackW - (pad * 2.0f)) / 2.0f
+          });
+    }
+
+    if (sb.hVisible) {
+      list.push(DrawRectCommand{
+          {sb.hTrackX + totalOffsetX, sb.hTrackY + totalOffsetY, sb.hTrackW, sb.hTrackH},
+          {0, 0, 0, trackAlpha},
+      });
+      list.push(DrawRectCommand{
+          {sb.hThumbX + pad + totalOffsetX, sb.hTrackY + pad + totalOffsetY, sb.hThumbW - (pad * 2.0f), sb.hTrackH - (pad * 2.0f)},
+          {180, 180, 180, thumbAlpha},
+          (sb.hTrackH - (pad * 2.0f)) / 2.0f
+      });
+    }
   }
 
   if (applyClip) {
@@ -1440,29 +1451,54 @@ void UI_UpdateSmoothScrolling(Node *n, float dt) {
 
 ScrollbarMetrics Node::getScrollbarMetrics() {
   ScrollbarMetrics m;
-  m.isVisible = false;
+  m.vVisible = (this->overflowScroll && this->contentH > this->h);
+  m.hVisible = (this->overflowScroll && this->contentW > this->w);
 
-  if (!this->overflowScroll || this->contentH <= this->h) {
-    return m;
+  if (!m.vVisible && !m.hVisible) return m;
+
+  // Initial Track Bounds
+  if (m.vVisible) {
+    m.vTrackW = 10.0f;
+    m.vTrackX = this->x + this->w - m.vTrackW - this->borderWidth;
+    m.vTrackY = this->y + this->borderWidth;
+    m.vTrackH = this->h - (this->borderWidth * 2.0f);
+    m.maxScrollY = this->contentH - this->h;
   }
-  m.isVisible = true;
-  m.trackW = 10.0f;
-  m.trackX = this->x + this->w - m.trackW - this->borderWidth;
-  m.trackY = this->y + this->borderWidth;
-  m.trackH = this->h - (this->borderWidth * 2.0f);
 
-  float thumbMinH = 20.0f;
-  float visibleRatio = this->h / this->contentH;
-  m.thumbH = std::max(thumbMinH, visibleRatio * m.trackH);
+  if (m.hVisible) {
+    m.hTrackH = 10.0f;
+    m.hTrackX = this->x + this->borderWidth;
+    m.hTrackY = this->y + this->h - m.hTrackH - this->borderWidth;
+    m.hTrackW = this->w - (this->borderWidth * 2.0f);
+    m.maxScrollX = this->contentW - this->w;
+  }
 
-  m.maxScrollY = this->contentH - this->h;
-  float scrollPct = this->scrollY / m.maxScrollY;
+  // Prevent Overlap in the Corner
+  if (m.vVisible && m.hVisible) {
+    m.vTrackH -= m.hTrackH; 
+    m.hTrackW -= m.vTrackW;
+  }
 
-  m.thumbY = m.trackY + (scrollPct * (m.trackH - m.thumbH));
+  if (m.vVisible) {
+    float thumbMinH = 20.0f;
+    float vRatio = this->h / this->contentH;
+    m.vThumbH = std::max(thumbMinH, vRatio * m.vTrackH);
+
+    float scrollPctY = this->scrollY / m.maxScrollY;
+    m.vThumbY = m.vTrackY + (scrollPctY * (m.vTrackH - m.vThumbH));
+  }
+
+  if (m.hVisible) {
+    float thumbMinW = 20.0f;
+    float hRatio = this->w / this->contentW;
+    m.hThumbW = std::max(thumbMinW, hRatio * m.hTrackW);
+
+    float scrollPctX = this->scrollX / m.maxScrollX;
+    m.hThumbX = m.hTrackX + (scrollPctX * (m.hTrackW - m.hThumbW));
+  }
 
   return m;
 }
-
 
 DamageRect g_damageTracker;
 
