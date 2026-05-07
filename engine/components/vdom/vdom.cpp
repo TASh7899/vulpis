@@ -341,6 +341,12 @@ namespace VDOM {
       paintChanged = true;
     }
 
+    float newBgOpacity = getFloatProp(L, "BGOpacity", 1.0f);
+    if (n->BGOpacity != newBgOpacity) {
+      n->BGOpacity = newBgOpacity;
+      paintChanged = true; 
+    }
+
     update(n->borderRadius, getFloatProp(L, "borderRadius", 0.0f), paintChanged);
     update(n->borderWidth, getFloatProp(L, "borderWidth", 0.0f), paintChanged);
 

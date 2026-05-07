@@ -425,6 +425,7 @@ Node* buildNode(lua_State* L, int idx) {
     checkFloat("bottom", n->hasBottom, n->bottomVal);
     
     n->opacity = getFloat("opacity", 1.0f);
+    n->BGOpacity = getFloat("BGOpacity", 1.0f);
 
   }
 
@@ -780,7 +781,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
   // BASE BACKGROUND
   if (n->hasBackground || n->borderWidth > 0.0f) {
     Color bgColor = n->hasBackground ? 
-      Color{n->color.r, n->color.g, n->color.b, (uint8_t)(n->color.a * alphaMultiplier)} : 
+      Color{n->color.r, n->color.g, n->color.b, (uint8_t)(n->color.a * n->BGOpacity * alphaMultiplier)} : 
       Color{0, 0, 0, 0};
 
     Color bColor = {n->borderColor.r, n->borderColor.g, n->borderColor.b, (uint8_t)(n->borderColor.a * alphaMultiplier)};
@@ -847,7 +848,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
       list.push(DrawImageCommand{
           {drawX, drawY, drawW, drawH},
           n->bgTextureId,
-          {255, 255, 255, (uint8_t)(255 * alphaMultiplier)},
+          {255, 255, 255, (uint8_t)(255 * alphaMultiplier * n->BGOpacity)},
           uMin, vMin, uMax, vMax,
           n->borderRadius,
           {renderX, renderY, n->w, n->h},
