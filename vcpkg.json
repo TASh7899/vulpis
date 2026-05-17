@@ -8,6 +8,8 @@
     "yoga",
     "opengl",
     "cpr",
-    "ixwebsocket"
+    "ixwebsocket",
+    "sqlite3",
+    "leveldb"
   ]
 }

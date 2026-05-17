@@ -29,6 +29,8 @@
 #include "./components/system/pathUtils.h"
 #include "./configLogic/engineConf/engine_config.h"
 #include "components/network/websockets/websockets_client.h"
+#include "components/database/sqlite_client.h"
+#include "components/database/kv_cache.h"
 
 #include "tools/stats_logger/stats_logger.h"
 
@@ -74,6 +76,11 @@ int main(int argc, char* argv[]) {
   UI_InitTypes(L);
   RegisterGlobalFunctions(L, "vulpis");
   AutoRegisterAllFonts();
+
+  HttpClient::Init();
+  WebSocketClient::Init();
+  SqliteClient::Init("vulpis_data.sqlite");
+  KVCache::Init("vulpis_kv_cache");
 
   std::string basePath = Vulpis::getProjectRoot();
 
@@ -289,8 +296,6 @@ int main(int argc, char* argv[]) {
   bool needsRedraw = true;
   uint32_t lastCursorToggle = SDL_GetTicks();
 
-  HttpClient::Init();
-  WebSocketClient::Init();
 
   while (running) {
 
@@ -370,6 +375,11 @@ int main(int argc, char* argv[]) {
       root->makeLayoutDirty();
     }
 
+    if (SqliteClient::ProcessQueue(L)) {
+      needsRedraw = true;
+      root->makeLayoutDirty();
+    }
+
     UI_UpdateSmoothScrolling(root, dt);
 
     if (root->isLayoutDirty || root->isPaintDirty) {
@@ -442,7 +452,7 @@ int main(int argc, char* argv[]) {
         needsRedraw = true;
       }
     }
-    
+
     if (needsRedraw) {
 
       double currentLayoutTimeMs = 0.0;
@@ -511,6 +521,9 @@ int main(int argc, char* argv[]) {
   TextureRegistry::Cleanup();
   HttpClient::ShutDown();
   WebSocketClient::ShutDown();
+  SqliteClient::ShutDown();
+  KVCache::ShutDown();
+
   freeTree(L, root);
   SDL_DestroyWindow(window);
   SDL_Quit();

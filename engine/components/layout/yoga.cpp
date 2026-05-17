@@ -86,6 +86,22 @@ namespace Layout {
           YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionColumn);
         } else if (n->type == "hbox") {
           YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionRow);
+        } else {
+          switch (n->flexDirection) {
+            case FlexDirection::Row:
+              YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionRow);
+              break;
+            case FlexDirection::RowReverse:
+              YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionRowReverse);
+              break;
+            case FlexDirection::ColumnReverse:
+              YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionColumnReverse);
+              break;
+            case FlexDirection::Column:
+            default:
+              YGNodeStyleSetFlexDirection(yogaNode, YGFlexDirectionColumn);
+              break;
+          }
         }
 
         if (n->flexWrap == FlexWrap::Wrap) {
@@ -211,7 +227,6 @@ namespace Layout {
           default: return YGJustifyFlexStart;
         }
       }
-
   };
 
   LayoutSolver* createYogaSolver() {

@@ -112,6 +112,15 @@ enum class AutoScroll {
     Bottom
 };
 
+
+enum class FlexDirection {
+    Column,
+    ColumnReverse,
+    Row,
+    RowReverse
+};
+
+
 struct Node {
   std::string type;
   std::string key;
@@ -228,6 +237,7 @@ struct Node {
   bool hasBottom = false; float bottomVal = 0.0f;
 
   FlexWrap flexWrap = FlexWrap::NoWrap;
+  FlexDirection flexDirection = FlexDirection::Column;
 
   float scrollbarOpacity = 0.0f;
   float scrollbarTimer = 0.0f;

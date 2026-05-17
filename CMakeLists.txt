@@ -28,6 +28,8 @@ find_package(Freetype REQUIRED)
 find_package(yoga CONFIG REQUIRED)
 find_package(cpr CONFIG REQUIRED)
 find_package(ixwebsocket CONFIG REQUIRED)
+find_package(leveldb CONFIG REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
 
 # 3. Manual GLAD (internal)
 add_library(glad STATIC third_party/glad/src/glad.c)
@@ -54,6 +56,8 @@ add_executable(vulpis
   engine/configLogic/engineConf/engine_config.cpp
   engine/configLogic/images/texture_registry.cpp
   engine/tools/stats_logger/stats_logger.cpp
+  engine/components/database/sqlite_client.cpp
+  engine/components/database/kv_cache.cpp
 )
 
 target_link_libraries(vulpis PRIVATE
@@ -66,6 +70,8 @@ target_link_libraries(vulpis PRIVATE
   Freetype::Freetype
   cpr::cpr
   ixwebsocket::ixwebsocket
+  leveldb::leveldb
+  unofficial::sqlite3::sqlite3
   ${CMAKE_DL_LIBS}
 )
 

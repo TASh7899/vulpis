@@ -15,6 +15,12 @@ namespace VDOM {
     return PositionType::Relative;
   }
 
+  FlexDirection parseFlexDirection(std::string s) {
+    if (s == "row") return FlexDirection::Row;
+    if (s == "row-reverse") return FlexDirection::RowReverse;
+    if (s == "column-reverse") return FlexDirection::ColumnReverse;
+    return FlexDirection::Column;
+  }
 
   bool operator!=(const Length& a, const Length& b) {
     return a.value != b.value || a.type != b.type || a.isSet != b.isSet; 
@@ -399,6 +405,7 @@ namespace VDOM {
     // flexbox - alignItems - justifyContent
     update(n->flexGrow, getFloatProp(L, "flexGrow", 0.0f), layoutChanged);
     update(n->flexShrink, getFloatProp(L, "flexShrink", 0.0f), layoutChanged);
+    update(n->flexDirection, parseFlexDirection(getStringProp(L, "flexDirection", "column")), layoutChanged);
     update(n->alignItems, parseAlign(getStringProp(L, "alignItems", "start")), layoutChanged);
     update(n->textAlign, parseTextAlign(getStringProp(L, "textAlign", "left")), layoutChanged);
 
