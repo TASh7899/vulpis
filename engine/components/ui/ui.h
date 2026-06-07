@@ -242,6 +242,10 @@ struct Node {
   float scrollbarOpacity = 0.0f;
   float scrollbarTimer = 0.0f;
 
+  int onScrollRef = -2;
+  float lastReportedScrollY = -1.0f;
+
+
   ScrollbarMetrics getScrollbarMetrics();
 
   SDL_Color color = {255, 255, 255, 255};
@@ -334,7 +338,7 @@ void UI_RegisterLuaFunctions(lua_State* L);
 void UI_SetRenderCommandList(RenderCommandList* list);
 void updateTextLayout(Node* root);
 
-
+void UI_FireScrollEvents(lua_State* L, Node* n);
 
 extern RenderCommandList* activeCommandList;
 

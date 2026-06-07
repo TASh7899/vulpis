@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <iostream>
 #include <lauxlib.h>
 #include <lua.h>
 #include <string>
@@ -178,7 +179,7 @@ void parseEvents(lua_State *L, Node *n, int idx) {
   getCallback("onKeyDown", n->onKeyDownRef);
   getCallback("onFocus", n->onFocusRef);
   getCallback("onBlur", n->onBlurRef);
-  
+  getCallback("onScroll", n->onScrollRef);
 }
 
 
@@ -627,6 +628,8 @@ void measure(Node* n) {
     for (Node* c : n->children) {
       measure(c);
 
+      if (c->position == PositionType::Absolute) continue;
+
       int childH = (int)c->h + c->marginBottom + c->marginTop;
       int childW = (int)c->w + c->marginLeft + c->marginRight;
 
@@ -650,6 +653,8 @@ void measure(Node* n) {
 
     for (Node* c : n->children) {
       measure(c);
+
+      if (c->position == PositionType::Absolute) continue;
 
       int childH = (int)c->h + c->marginTop + c->marginBottom;
       int childW = (int)c->w + c->marginLeft + c->marginRight;
@@ -690,6 +695,16 @@ void layout(Node* n, int x, int y) {
     int cursor = y + n->paddingTop;
 
     for (Node* c : n->children) {
+      if (c->position == PositionType::Absolute) {
+        int cx = x + n->paddingLeft;
+        int cy = y + n->paddingTop;
+
+        if (c->hasLeft) cx += (int)c->leftVal;
+        if (c->hasRight) cx += (int)c->hasRight;
+
+        layout(c, cx, cy);
+        continue;
+      }
       int cx = x + n->paddingLeft + c->marginLeft;
       int cy = cursor + c->marginTop;
 
@@ -701,6 +716,18 @@ void layout(Node* n, int x, int y) {
     int cursor = x + n->paddingLeft; 
 
     for (Node* c : n->children) {
+
+      if (c->position == PositionType::Absolute) {
+        int cx = x + n->paddingLeft;
+        int cy = y + n->paddingTop;
+
+        if (c->hasLeft) cx += (int)c->leftVal;
+        if (c->hasTop) cy += (int)c->topVal;
+
+        layout(c, cx, cy);
+        continue;
+      }
+
       int cx = cursor + c->marginLeft;
       int cy = y + n->paddingTop + c->marginTop;
 
@@ -1082,7 +1109,7 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
           {sb.vTrackX + totalOffsetX, sb.vTrackY + totalOffsetY, sb.vTrackW, sb.vTrackH},
           {0, 0, 0, trackAlpha},
           });
-      
+
       list.push(DrawRectCommand{
           {sb.vTrackX + pad + totalOffsetX, sb.vThumbY + pad + totalOffsetY, sb.vTrackW - (pad * 2.0f), sb.vThumbH - (pad * 2.0f)},
           {180, 180, 180, thumbAlpha},
@@ -1094,12 +1121,12 @@ static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX
       list.push(DrawRectCommand{
           {sb.hTrackX + totalOffsetX, sb.hTrackY + totalOffsetY, sb.hTrackW, sb.hTrackH},
           {0, 0, 0, trackAlpha},
-      });
+          });
       list.push(DrawRectCommand{
           {sb.hThumbX + pad + totalOffsetX, sb.hTrackY + pad + totalOffsetY, sb.hThumbW - (pad * 2.0f), sb.hTrackH - (pad * 2.0f)},
           {180, 180, 180, thumbAlpha},
           (sb.hTrackH - (pad * 2.0f)) / 2.0f
-      });
+          });
     }
   }
 
@@ -1191,6 +1218,11 @@ void freeTree(lua_State* L, Node* n) {
   if (n->onBlurRef != -2) {
     luaL_unref(L, LUA_REGISTRYINDEX, n->onBlurRef);
     n->onBlurRef = -2;
+  }
+
+  if (n->onScrollRef != -2) {
+    luaL_unref(L, LUA_REGISTRYINDEX, n->onScrollRef);
+    n->onScrollRef = -2;
   }
 
   for (Node* c : n->children) {
@@ -1387,6 +1419,7 @@ void UI_UpdateSmoothScrolling(Node *n, float dt) {
 
   if (isLoading) {
     n->makePaintDirty();
+    g_damageTracker.add(n->x, n->y, n->w, n->h);
   }
 
   if (n->overflowHidden) {
@@ -1407,6 +1440,7 @@ void UI_UpdateSmoothScrolling(Node *n, float dt) {
     n->targetScrollX = std::clamp(n->targetScrollX, 0.0f, maxScrollX);
 
     if (n->overflowScroll) { 
+      float previousOpacity = n->scrollbarOpacity;
       if (n->scrollbarTimer > 0.0f) {
         n->scrollbarTimer -= dt;
         n->scrollbarOpacity += 8.0f * dt;
@@ -1415,7 +1449,12 @@ void UI_UpdateSmoothScrolling(Node *n, float dt) {
         n->scrollbarOpacity -= 2.0f * dt; // Fade out slower
         if (n->scrollbarOpacity < 0.0f) n->scrollbarOpacity = 0.0f;
       }
+      if (n->scrollbarOpacity != previousOpacity) {
+        n->makePaintDirty();
+        g_damageTracker.add(n->x, n->y, n->w, n->h);
+      }
     }
+
 
     float diffY = n->targetScrollY - n->scrollY;
     float diffX = n->targetScrollX - n->scrollX;
@@ -1440,6 +1479,7 @@ void UI_UpdateSmoothScrolling(Node *n, float dt) {
 
     if (needsLayout) {
       n->makePaintDirty();
+      g_damageTracker.add(n->x, n->y, n->w, n->h);
     }
   }
   for (Node* c : n->children) {
@@ -1479,12 +1519,15 @@ ScrollbarMetrics Node::getScrollbarMetrics() {
     m.hTrackW -= m.vTrackW;
   }
 
+  m.vTrackH = std::max(0.0f, m.vTrackH);
+  m.vTrackW = std::max(0.0f, m.vTrackW);
+
   if (m.vVisible) {
     float thumbMinH = 20.0f;
     float vRatio = this->h / this->contentH;
     m.vThumbH = std::max(thumbMinH, vRatio * m.vTrackH);
-
-    float scrollPctY = this->scrollY / m.maxScrollY;
+    m.vThumbH = std::min(m.vThumbH, m.vTrackH);
+    float scrollPctY = m.maxScrollY > 0.0f ? std::clamp(this->scrollY / m.maxScrollY, 0.0f, 1.0f) : 0.0f;
     m.vThumbY = m.vTrackY + (scrollPctY * (m.vTrackH - m.vThumbH));
   }
 
@@ -1492,8 +1535,8 @@ ScrollbarMetrics Node::getScrollbarMetrics() {
     float thumbMinW = 20.0f;
     float hRatio = this->w / this->contentW;
     m.hThumbW = std::max(thumbMinW, hRatio * m.hTrackW);
-
-    float scrollPctX = this->scrollX / m.maxScrollX;
+    m.hThumbW = std::min(m.hThumbW, m.hTrackW);
+    float scrollPctX = m.maxScrollX > 0.0f ? std::clamp(this->scrollX / m.maxScrollX, 0.0f, 1.0f) : 0.0f;
     m.hThumbX = m.hTrackX + (scrollPctX * (m.hTrackW - m.hThumbW));
   }
 
@@ -1537,5 +1580,27 @@ void DamageRect::update() {
 
 }
 
+void UI_FireScrollEvents(lua_State *L, Node *n) {
+  if (!n) return;
+  if (n->onScrollRef != -2 && std::abs(n->scrollY - n->lastReportedScrollY) >= 1.0f) {
+    n->lastReportedScrollY = n->scrollY;
+
+    lua_rawgeti(L, LUA_REGISTRYINDEX, n->onScrollRef);
+    if (lua_isfunction(L, -1)) {
+      lua_pushnumber(L, n->scrollX);
+      lua_pushnumber(L, n->scrollY);
+      lua_pushnumber(L, n->h);
+      if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
+        std::cerr << "VDOM onScroll Error: " << lua_tostring(L, -1) << std::endl;
+      }
+    } else {
+      lua_pop(L, 1);
+    }
+  }
+
+  for (Node* c : n->children) {
+    UI_FireScrollEvents(L, c);
+  }
+}
 
 

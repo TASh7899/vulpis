@@ -382,6 +382,8 @@ int main(int argc, char* argv[]) {
 
     UI_UpdateSmoothScrolling(root, dt);
 
+    UI_FireScrollEvents(L, root);
+
     if (root->isLayoutDirty || root->isPaintDirty) {
       needsRedraw = true;
     }

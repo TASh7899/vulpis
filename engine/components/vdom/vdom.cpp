@@ -624,6 +624,8 @@ namespace VDOM {
     updateCallback(L, idx, "onMouseLeave", n->onMouseLeaveRef);
     updateCallback(L, idx, "onRightClick", n->onRightClickRef);
 
+    updateCallback(L, idx, "onScroll", n->onScrollRef);
+
     if (layoutChanged) {
       n->makeLayoutDirty();
     } else if (paintChanged) {
