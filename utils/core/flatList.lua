@@ -54,6 +54,8 @@ local function FlatList(props)
 					else
 						itemNode.style = itemNode.style or {}
 						itemNode.style.flexGrow = 1
+						itemNode.style.flexShrink = 1
+						itemNode.style.w = tostring(100 / numColumns) .. "%"
 						itemNode.style.h = itemHeight
 						itemNode.style.margin = gap / 2
 					end
@@ -62,14 +64,25 @@ local function FlatList(props)
 					table.insert(
 						columns,
 						elements.Box({
-							style = { flexGrow = 1, margin = gap / 2 },
+							style = {
+								flexGrow = 1,
+								flexShrink = 1,
+								w = tostring(100 / numColumns) .. "%",
+								margin = gap / 2,
+							},
 						})
 					)
 				end
 			end
 
 			return elements.HBox({
-				style = { w = "100%", h = rowHeight, paddingLeft = gap / 2, paddingRight = gap / 2 },
+				style = {
+					w = "100%",
+					h = rowHeight,
+					paddingLeft = gap / 2,
+					paddingRight = gap / 2,
+					alignItems = "stretch",
+				},
 				children = columns,
 			})
 		end,

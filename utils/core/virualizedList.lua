@@ -23,13 +23,18 @@ local function VirtualList(props)
 	for dataIndex = startIndex, endIndex do
 		local poolSlotIndex = (dataIndex % visibleCount) + 1
 		local success, node = pcall(renderItem, dataIndex)
+
 		if success and type(node) == "table" then
 			node.id = props.id .. "_pool_slot_" .. poolSlotIndex
 
 			node.style = node.style or {}
 			node.style.position = "absolute"
-			node.style.top = dataIndex * itemHeight
+
+			node.style.top = 0
 			node.style.left = 0
+
+			node.style.translateY = dataIndex * itemHeight
+
 			node.style.w = "100%"
 			node.style.h = itemHeight
 

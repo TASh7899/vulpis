@@ -287,8 +287,14 @@ struct Node {
     }
   }
 
+  float translateX = 0.0f;
+  float translateY = 0.0f;
+
   void makePaintDirty() {
-    g_damageTracker.add(this->x + this->cachedOffsetX + this->dragOffsetX, this->y + this->cachedOffsetY + this->dragOffsetY, this->w, this->h);
+    g_damageTracker.add(
+        this->x + this->cachedOffsetX + this->dragOffsetX + this->translateX,
+        this->y + this->cachedOffsetY + this->dragOffsetY + this->translateY,
+        this->w, this->h);
     isPaintDirty = true;
     if (parent) {
       parent->markTreePaintDirty();

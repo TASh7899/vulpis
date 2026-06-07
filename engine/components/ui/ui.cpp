@@ -484,6 +484,9 @@ Node* buildNode(lua_State* L, int idx) {
   n->flexGrow = getFloat("flexGrow", 0.0f);
   n->flexShrink  = getFloat("flexShrink", 0.0f);
 
+  n->translateX = getFloat("translateX", 0.0f);
+  n->translateY = getFloat("translateY", 0.0f);
+
   n->flexWrap = parseFlexWrap(getString("flexWrap", "nowrap"));
 
   n->alignItems = parseAlign(getString("alignItems", "start"));
@@ -569,9 +572,9 @@ Node* buildNode(lua_State* L, int idx) {
   lua_pop(L, 1);
 
 
-// ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
-// ╏ text selection flag ╏
-// ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
+  // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
+  // ╏ text selection flag ╏
+  // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
   lua_getfield(L, idx, "allowSelection");
   if (!lua_isnil(L, -1)) {
     n->allowSelection = lua_toboolean(L, -1);
@@ -695,49 +698,47 @@ void layout(Node* n, int x, int y) {
     int cursor = y + n->paddingTop;
 
     for (Node* c : n->children) {
-      if (c->position == PositionType::Absolute) {
-        int cx = x + n->paddingLeft;
-        int cy = y + n->paddingTop;
-
-        if (c->hasLeft) cx += (int)c->leftVal;
-        if (c->hasRight) cx += (int)c->hasRight;
-
-        layout(c, cx, cy);
-        continue;
-      }
       int cx = x + n->paddingLeft + c->marginLeft;
       int cy = cursor + c->marginTop;
 
-      layout(c, cx, cy);
-      cursor += (int)c->h + n->spacing + c->marginTop + c->marginBottom;
+      if (c->position == PositionType::Absolute) {
+        cx = x + n->paddingLeft;
+        cy = y + n->paddingTop;
+        if (c->hasLeft)   cx += (int)c->leftVal;
+        if (c->hasTop)    cy += (int)c->topVal;
+        if (c->hasRight)  cx -= (int)c->rightVal; 
+        if (c->hasBottom) cy -= (int)c->bottomVal; 
+      }
+
+      layout(c, cx + (int)c->translateX, cy + (int)c->translateY);
+
+      if (c->position != PositionType::Absolute) {
+        cursor += (int)c->h + n->spacing + c->marginTop + c->marginBottom;
+      }
     }
   }
   else if (n->type == "hbox") {
     int cursor = x + n->paddingLeft; 
 
     for (Node* c : n->children) {
-
-      if (c->position == PositionType::Absolute) {
-        int cx = x + n->paddingLeft;
-        int cy = y + n->paddingTop;
-
-        if (c->hasLeft) cx += (int)c->leftVal;
-        if (c->hasTop) cy += (int)c->topVal;
-
-        layout(c, cx, cy);
-        continue;
-      }
-
       int cx = cursor + c->marginLeft;
       int cy = y + n->paddingTop + c->marginTop;
 
-      layout(c, cx, cy);
-      cursor += (int)c->w + n->spacing + c->marginRight + c->marginLeft;
+      if (c->position == PositionType::Absolute) {
+        cx = x + n->paddingLeft;
+        cy = y + n->paddingTop;
+        if (c->hasLeft) cx += (int)c->leftVal;
+        if (c->hasTop)  cy += (int)c->topVal;
+      }
+
+      layout(c, cx + (int)c->translateX, cy + (int)c->translateY);
+
+      if (c->position != PositionType::Absolute) {
+        cursor += (int)c->w + n->spacing + c->marginRight + c->marginLeft;
+      }
     }
   }
 }
-
-
 void TranslateRenderCommand(RenderCommand& cmd, float dx, float dy) {
   std::visit([dx, dy](auto& c){
       using T = std::decay_t<decltype(c)>;
@@ -763,8 +764,8 @@ void TranslateRenderCommand(RenderCommand& cmd, float dx, float dy) {
 static void renderNodePass(Node* n, RenderCommandList& list, float parentOffsetX,
     float parentOffsetY, bool isDragPass, bool isInsideDraggedNode, float parentAlpha) {
 
-  float totalOffsetX = parentOffsetX;
-  float totalOffsetY = parentOffsetY;
+  float totalOffsetX = parentOffsetX + n->translateX;
+  float totalOffsetY = parentOffsetY + n->translateY;
 
   if (isDragPass) {
     totalOffsetX += n->dragOffsetX;

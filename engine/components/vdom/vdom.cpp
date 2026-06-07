@@ -536,8 +536,6 @@ namespace VDOM {
     }
 
 
-    lua_pop(L, 1);
-
     lua_getfield(L, idx, "focusable");
     if (!lua_isnil(L, -1)) n->isFocusable = lua_toboolean(L, -1);
     else n->isFocusable = false;
@@ -607,6 +605,22 @@ namespace VDOM {
         paintChanged = true;
       }
     }
+    lua_pop(L, 1);
+
+    float newTranslateX = getFloatProp(L, "translateX", 0.0f);
+    if (n->translateX != newTranslateX) {
+      n->translateX = newTranslateX;
+      n->invalidateSubtreePaint(); 
+      paintChanged = true;
+    }
+
+    float newTranslateY = getFloatProp(L, "translateY", 0.0f);
+    if (n->translateY != newTranslateY) {
+      n->translateY = newTranslateY;
+      n->invalidateSubtreePaint(); 
+      paintChanged = true;
+    }
+
     lua_pop(L, 1);
 
     updateCallback(L, idx, "onTextInput", n->onTextInputRef);
