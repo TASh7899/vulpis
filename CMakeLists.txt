@@ -58,6 +58,7 @@ add_executable(vulpis
   engine/tools/stats_logger/stats_logger.cpp
   engine/components/database/sqlite_client.cpp
   engine/components/database/kv_cache.cpp
+  engine/components/audio/audio.cpp
 )
 
 target_link_libraries(vulpis PRIVATE
@@ -116,6 +117,17 @@ else()
     COMMENT "Ensuring assets symlink and fonts exist..."
   )
 endif()
+
+if (APPLE)
+    # macOS requires the CoreAudio and AudioToolbox frameworks
+    target_link_libraries(vulpis PRIVATE "-framework CoreAudio" "-framework AudioToolbox")
+elseif (UNIX AND NOT APPLE)
+    # Linux (including Arch) typically requires math and pthread for miniaudio
+    target_link_libraries(vulpis PRIVATE m pthread dl)
+elseif (WIN32)
+    # but if needed later, Windows-specific libs go here.
+endif()
+
 
 add_dependencies(SyncAssets BakeAssets)
 add_dependencies(vulpis SyncAssets)

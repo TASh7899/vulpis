@@ -31,6 +31,7 @@
 #include "components/network/websockets/websockets_client.h"
 #include "components/database/sqlite_client.h"
 #include "components/database/kv_cache.h"
+#include "components/audio/audio.h"
 
 #include "tools/stats_logger/stats_logger.h"
 
@@ -81,6 +82,7 @@ int main(int argc, char* argv[]) {
   WebSocketClient::Init();
   SqliteClient::Init("vulpis_data.sqlite");
   KVCache::Init("vulpis_kv_cache");
+  Audio::Init();
 
   std::string basePath = Vulpis::getProjectRoot();
 
@@ -525,6 +527,7 @@ int main(int argc, char* argv[]) {
   WebSocketClient::ShutDown();
   SqliteClient::ShutDown();
   KVCache::ShutDown();
+  Audio::ShutDown();
 
   freeTree(L, root);
   SDL_DestroyWindow(window);
