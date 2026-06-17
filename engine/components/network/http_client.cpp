@@ -209,7 +209,7 @@ bool HttpClient::ProcessQueue(lua_State *L) {
     lua_pushinteger(L, res.statusCode);
     lua_setfield(L, -2, "status");
 
-    lua_pushstring(L, res.body.c_str());
+    lua_pushlstring(L, res.body.c_str(), res.body.size());
     lua_setfield(L, -2, "body");
 
     lua_pushstring(L, res.error.c_str());
