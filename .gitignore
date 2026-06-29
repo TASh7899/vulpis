@@ -85,3 +85,6 @@ lsan.log
 *.core
 
 .cache/
+
+manifest.json
+

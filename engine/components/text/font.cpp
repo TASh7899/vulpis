@@ -15,6 +15,9 @@
 #include <sys/types.h>
 #include <utility>
 #include <vector>
+#include <zip.h>
+#include <fstream>
+
 #include "../ui/ui.h"
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
@@ -190,6 +193,7 @@ void Font::AllocateAtlasPage() {
 // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
 
 static FT_Library g_ftLib = nullptr;
+
 void Font::Load(const std::string& path, unsigned int size) {
   if (g_ftLib == nullptr) {
     if (FT_Init_FreeType(&g_ftLib)) {
@@ -198,17 +202,48 @@ void Font::Load(const std::string& path, unsigned int size) {
     }
   }
 
-  std::string fullpath = Vulpis::getAssetPath(path);
-  if (!std::filesystem::exists(fullpath)) {
-    std::cerr << "!!! FATAL ERROR !!!" << std::endl;
-    std::cerr << "Asset missing at: " << fullpath << std::endl;
-    std::cerr << "Current Working Dir: " << std::filesystem::current_path() << std::endl;
-    return;
+  std::string relativePath = path;
+  if (relativePath.find("assets/") == 0) relativePath = relativePath.substr(7);
+  else if (relativePath.find("./assets/") == 0) relativePath = relativePath.substr(9);
+  
+  std::string vpakPath = Vulpis::getProjectRoot() + "app.vpak";
+  int zipErr = 0;
+  zip_t* vpak = zip_open(vpakPath.c_str(), ZIP_RDONLY, &zipErr);
+  
+  if (vpak) {
+      std::string vfsPath = "assets/" + relativePath;
+      zip_stat_t stat;
+      if (zip_stat(vpak, vfsPath.c_str(), 0, &stat) == 0) {
+          zip_file_t* f = zip_fopen(vpak, vfsPath.c_str(), 0);
+          if (f) {
+              fontBuffer.resize(stat.size);
+              zip_fread(f, fontBuffer.data(), stat.size);
+              zip_fclose(f);
+          }
+      }
+      zip_close(vpak);
   }
   
+  // Disk fallback if not found in VFS
+  if (fontBuffer.empty()) {
+      std::string fullpath = Vulpis::getAssetPath(relativePath);
+      std::ifstream file(fullpath, std::ios::binary | std::ios::ate);
+      if (file) {
+          std::streamsize fsize = file.tellg();
+          file.seekg(0, std::ios::beg);
+          fontBuffer.resize(fsize);
+          file.read(reinterpret_cast<char*>(fontBuffer.data()), fsize);
+      } else {
+          std::cerr << "!!! FATAL ERROR !!!" << std::endl;
+          std::cerr << "Asset missing at: " << fullpath << std::endl;
+          return;
+      }
+  }
+
   FT_Face face;
-  if (FT_New_Face(g_ftLib, fullpath.c_str(), 0, &face)) {
-    std::cerr << "ERROR::FREETYPE: Failed to load font: " << fullpath << std::endl;
+  // Initialize from memory rather than disk
+  if (FT_New_Memory_Face((FT_Library)g_ftLib, fontBuffer.data(), fontBuffer.size(), 0, &face)) {
+    std::cerr << "ERROR::FREETYPE: Failed to load font from memory: " << path << std::endl;
     return;
   }
 

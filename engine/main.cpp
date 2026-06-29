@@ -13,8 +13,22 @@
 #include <ostream>
 #include <string>
 #include <memory>
+#include <zip.h>
 
-#include "components/network/http_client.h"
+#ifdef VULPIS_MODULE_NETWORK
+  #include "components/network/http_client.h"
+  #include "components/network/websockets/websockets_client.h"
+#endif
+
+#ifdef VULPIS_MODULE_DATABASE
+  #include "components/database/sqlite_client.h"
+  #include "components/database/kv_cache.h"
+#endif
+
+#ifdef VULPIS_MODULE_AUDIO
+  #include "components/audio/audio.h"
+#endif
+
 #include "components/renderer/commands.h"
 #include "components/renderer/opengl_renderer.h"
 #include "components/text/font.h"
@@ -28,10 +42,6 @@
 #include "./configLogic/images/texture_registry.h"
 #include "./components/system/pathUtils.h"
 #include "./configLogic/engineConf/engine_config.h"
-#include "components/network/websockets/websockets_client.h"
-#include "components/database/sqlite_client.h"
-#include "components/database/kv_cache.h"
-#include "components/audio/audio.h"
 
 #include "tools/stats_logger/stats_logger.h"
 
@@ -78,11 +88,19 @@ int main(int argc, char* argv[]) {
   RegisterGlobalFunctions(L, "vulpis");
   AutoRegisterAllFonts();
 
+#ifdef VULPIS_MODULE_NETWORK
   HttpClient::Init();
   WebSocketClient::Init();
+#endif
+
+#ifdef VULPIS_MODULE_DATABASE
   SqliteClient::Init("vulpis_data.sqlite");
   KVCache::Init("vulpis_kv_cache");
+#endif
+
+#ifdef VULPIS_MODULE_AUDIO
   Audio::Init();
+#endif
 
   std::string basePath = Vulpis::getProjectRoot();
 
@@ -110,14 +128,71 @@ int main(int argc, char* argv[]) {
   lua_setfield(L, -2, "path");
   lua_pop(L, 1);
 
-  std::string appPath = basePath + "src/app.lua";
-  if (luaL_dofile(L, appPath.c_str()) != LUA_OK) {
-    std::cout << "Lua Error: " << lua_tostring(L, -1) << std::endl;
-    lua_close(L);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
-    return 1;
+
+  namespace fs = std::filesystem;
+
+  fs::path base(basePath);
+  fs::path vpakPath;
+
+  if (fs::exists(base / "build" / "release" / "app.vpak")) {
+    vpakPath = base / "build" / "release" / "app.vpak";
   }
+  else if (fs::exists(base / "build" / "debug" / "app.vpak")) {
+    vpakPath = base / "build" / "debug" / "app.vpak";
+  }
+  else {
+    if (std::getenv("VULPIS_DEV_MODE") == nullptr) {
+        std::cout << ".vpak file not found" << std::endl;
+    }
+  }
+  bool appLoaded = false;
+  
+  bool isDevMode = std::getenv("VULPIS_DEV_MODE") != nullptr;
+
+  if (!isDevMode && !vpakPath.empty()) {
+    int zipErr = 0;
+    zip_t* vpak = zip_open(vpakPath.c_str(), ZIP_RDONLY, &zipErr);
+
+    if (vpak) {
+      std::cout << "--- Mounting VFS: app.vpak ---" << std::endl;
+
+      zip_stat_t stat;
+      if (zip_stat(vpak, "src/app.luac", 0, &stat) == 0) {
+        std::vector<char> bytecode(stat.size);
+        zip_file_t* f = zip_fopen(vpak, "src/app.luac", 0);
+        if (f) {
+          zip_fread(f, bytecode.data(), stat.size);
+          zip_fclose(f);
+
+          if (luaL_loadbuffer(L, bytecode.data(), bytecode.size(), "app.luac") == LUA_OK && lua_pcall(L, 0, 0, 0) == LUA_OK) {
+            appLoaded = true;
+            std::cout << "[VFS] Successfully loaded app.luac from memory." << std::endl;
+          } else {
+            std::cout << "Lua VFS Error: " << lua_tostring(L, -1) << std::endl;
+          }
+        }
+      }
+      zip_close(vpak);
+    }
+  }
+
+  // Fallback to Disk (Development Mode)
+  if (!appLoaded) {
+    if (!isDevMode) std::cout << "--- VFS not found or missing app.luac. Falling back to disk... ---" << std::endl;
+
+    std::string appPath = basePath + "src/app.lua";
+    std::string appBytecodePath = basePath + "src/app.luac";
+
+    const char* loadPath = std::filesystem::exists(appBytecodePath) ? appBytecodePath.c_str() : appPath.c_str();
+    if (luaL_dofile(L, loadPath) != LUA_OK) {
+      std::cout << "Lua Disk Error: " << lua_tostring(L, -1) << std::endl;
+      lua_close(L);
+      SDL_DestroyWindow(window);
+      SDL_Quit();
+      return 1;
+    }
+  }
+
 
 
   //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
@@ -284,9 +359,9 @@ int main(int argc, char* argv[]) {
 
   std::unique_ptr<Vulpis::Tools::StatsLogger> statsLogger = nullptr;
   if (GetEngineConfig().enableStatsLogging) {
-      statsLogger = std::make_unique<Vulpis::Tools::StatsLogger>(basePath + "vulpis_research_data.csv");
+    statsLogger = std::make_unique<Vulpis::Tools::StatsLogger>(basePath + "vulpis_research_data.csv");
   }
-  
+
 
 
   //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
@@ -362,25 +437,21 @@ int main(int argc, char* argv[]) {
     lastTime = currentTime;
 
     // 3. PROCESS BACKGROUND QUEUES (Instantly handles the data that woke us up)
-    if (HttpClient::ProcessQueue(L)) {
-      needsRedraw = true;
-      root->makeLayoutDirty(); 
-    }
 
-    if (WebSocketClient::ProcessQueue(L)) {
-      needsRedraw = true;
-      root->makeLayoutDirty(); 
-    }
+#ifdef VULPIS_MODULE_NETWORK
+    if (HttpClient::ProcessQueue(L)) { needsRedraw = true; root->makeLayoutDirty(); }
+    if (WebSocketClient::ProcessQueue(L)) { needsRedraw = true; root->makeLayoutDirty(); }
+#endif
+
+#ifdef VULPIS_MODULE_DATABASE
+    if (SqliteClient::ProcessQueue(L)) { needsRedraw = true; root->makeLayoutDirty(); }
+#endif
 
     if (TextureRegistry::ProcessUploads()) {
       needsRedraw = true;
       root->makeLayoutDirty();
     }
 
-    if (SqliteClient::ProcessQueue(L)) {
-      needsRedraw = true;
-      root->makeLayoutDirty();
-    }
 
     UI_UpdateSmoothScrolling(root, dt);
 
@@ -523,11 +594,19 @@ int main(int argc, char* argv[]) {
 
   UI_ShutdownFonts();
   TextureRegistry::Cleanup();
+#ifdef VULPIS_MODULE_NETWORK
   HttpClient::ShutDown();
   WebSocketClient::ShutDown();
+#endif
+
+#ifdef VULPIS_MODULE_DATABASE
   SqliteClient::ShutDown();
   KVCache::ShutDown();
+#endif
+
+#ifdef VULPIS_MODULE_AUDIO
   Audio::ShutDown();
+#endif
 
   freeTree(L, root);
   SDL_DestroyWindow(window);

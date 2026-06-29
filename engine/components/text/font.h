@@ -89,6 +89,8 @@ class Font {
     void* ftLib = nullptr;
     void* ftFace = nullptr;
 
+    std::vector<unsigned char> fontBuffer;
+
     void Load(const std::string& path, unsigned int size);
     const Character* LoadGlyph(uint32_t c);
     const Character* GetCharInternal(uint32_t c);
