@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <iostream>
+#include <zip.h>
 #include "../../components/system/pathUtils.h"
 #include "../engineConf/engine_config.h"
 #include "../../scripting/regsitry.h"
@@ -71,7 +72,7 @@ void RegisterFontsFromTable(lua_State* L, int tableIndex) {
       // --- ALIAS_OF ---
       lua_getfield(L, -1, "alias_of");
       if (lua_isstring(L, -1)) aliasOf = lua_tostring(L, -1);
-      lua_pop(L, 1); // FIX: Always pop, even if it wasn't a string!
+      lua_pop(L, 1); 
 
       // --- SIZE ---
       lua_getfield(L, -1, "size");
@@ -199,7 +200,6 @@ void AutoRegisterAllFonts() {
 }
 
 
-
 void LoadFontConfig(lua_State* L) {
   g_canLoadTextures = true;
   loadEngineConfig(L);
@@ -207,21 +207,58 @@ void LoadFontConfig(lua_State* L) {
   AutoRegisterAllFonts();
 
   namespace fs = std::filesystem;
-  fs::path configPath = std::filesystem::path(Vulpis::getProjectRoot()) / "config" / "VP_FONT_CONFIG.lua";
+  fs::path configPath = Vulpis::resolvePath(fs::path("config") / "VP_FONT_CONFIG.lua");
 
+  int top = lua_gettop(L);
+  bool loaded = false;
+
+  // 1. Try loading from physical disk first (Dev Mode)
   if (fs::exists(configPath)) {
-    int top = lua_gettop(L);
-    if (luaL_dofile(L, configPath.string().c_str()) != LUA_OK) {
-      std::cerr << "Error loading font config" << lua_tostring(L, -1) << std::endl;
+    if (luaL_dofile(L, configPath.string().c_str()) == LUA_OK) {
+      loaded = true;
     } else {
-      if (lua_gettop(L) > top && lua_istable(L, -1)) {
-        RegisterFontsFromTable(L, -1);
-      }
+      std::cerr << "Error loading font config from disk: " << lua_tostring(L, -1) << std::endl;
+      lua_pop(L, 1);
     }
-    lua_settop(L, top);
-  } else {
-    std::cout << "Info: Font Config file not found at " << configPath << ". Skipping.\n";
+  } 
+  // 2. Fallback to reading from the .vpak (Release Mode)
+  else {
+    std::string vpakPath = Vulpis::getVpakPath().string();
+    int zipErr = 0;
+    zip_t* vpak = zip_open(vpakPath.c_str(), ZIP_RDONLY, &zipErr);
+    
+    if (vpak) {
+      zip_stat_t stat;
+      if (zip_stat(vpak, "config/VP_FONT_CONFIG.lua", 0, &stat) == 0) {
+        zip_file_t* f = zip_fopen(vpak, "config/VP_FONT_CONFIG.lua", 0);
+        if (f) {
+          std::vector<char> buffer(stat.size);
+          zip_fread(f, buffer.data(), stat.size);
+          zip_fclose(f);
+          
+          if (luaL_loadbuffer(L, buffer.data(), buffer.size(), "VP_FONT_CONFIG.lua") == LUA_OK &&
+              lua_pcall(L, 0, LUA_MULTRET, 0) == LUA_OK) {
+            loaded = true;
+          } else {
+            std::cerr << "Error loading font config from vpak: " << lua_tostring(L, -1) << std::endl;
+            lua_pop(L, 1);
+          }
+        }
+      }
+      zip_close(vpak);
+    }
   }
+
+  // 3. Register table if loaded successfully
+  if (loaded) {
+    if (lua_gettop(L) > top && lua_istable(L, -1)) {
+      RegisterFontsFromTable(L, -1);
+    }
+  } else {
+    std::cout << "Info: Font Config file not found at disk or vpak. Skipping.\n";
+  }
+  
+  lua_settop(L, top);
 
   const EngineConfig& engineConf = GetEngineConfig();
   if (engineConf.enableDefaultFonts) {
@@ -233,9 +270,6 @@ void LoadFontConfig(lua_State* L) {
 
   RebuildFallbackList();
 }
-
-
-
 int l_update_font_config(lua_State* L) {
   const char* alias = luaL_checkstring(L, 1);
   luaL_checktype(L, 2, LUA_TTABLE);

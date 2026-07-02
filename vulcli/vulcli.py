@@ -112,16 +112,16 @@ def pack(root_dir, build_dir):
 
     assets_dir = os.path.join(root_dir, "assets")
     staging_src = os.path.join(build_dir, "staging", "src")
+    config_dir = os.path.join(root_dir, "config")
     output_vpak = os.path.join(build_dir, "app.vpak")
 
     print(f"--- Packing VFS Archive: {output_vpak} ---")
     try:
-        subprocess.run([baker_path, assets_dir, staging_src, output_vpak], check=True)
+        subprocess.run([baker_path, assets_dir, staging_src, config_dir, output_vpak], check=True)
         print("--- Packing Complete ---")
     except subprocess.CalledProcessError as e:
         print(f"--- Packing Failed: {e} ---")
         sys.exit(1)
-
 def pack_scripts(root_dir, build_dir):
     compile_lua(root_dir, build_dir)
 

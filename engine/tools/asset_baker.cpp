@@ -1,3 +1,4 @@
+#include <complex>
 #include <iostream>
 #include <filesystem>
 #include <string>
@@ -78,13 +79,14 @@ void bakeAndPackTexture(zip_t* archive, const fs::path& imgPath, const std::stri
 
 int main(int argc, char* argv[]) {
     if (argc < 4) {
-        std::cerr << "Usage: asset_baker <assets_dir> <staged_src_dir> <output.vpak>\n";
+        std::cerr << "Usage: asset_baker <assets_dir> <staged_src_dir> <config_dir> <output.vpak>\n";
         return 1;
     }
 
     fs::path assetsDir = argv[1];
     fs::path stagedSrcDir = argv[2];
-    fs::path outVpak = argv[3];
+    fs::path configDir = argv[3];
+    fs::path outVpak = argv[4];
 
     int err = 0;
     zip_t* archive = zip_open(outVpak.string().c_str(), ZIP_CREATE | ZIP_TRUNCATE, &err);
@@ -116,6 +118,15 @@ int main(int argc, char* argv[]) {
         for (const auto& entry : fs::recursive_directory_iterator(stagedSrcDir)) {
             if (entry.is_regular_file() && entry.path().extension() == ".luac") {
               std::string relPath = "src/" + fs::relative(entry.path(), stagedSrcDir).string();
+                packRawFile(archive, entry.path(), relPath);
+            }
+        }
+    }
+
+    if (fs::exists(configDir)) {
+        for (const auto& entry : fs::recursive_directory_iterator(configDir)) {
+            if (entry.is_regular_file()) {
+                std::string relPath = "config/" + fs::relative(entry.path(), configDir).string();
                 packRawFile(archive, entry.path(), relPath);
             }
         }

@@ -8,6 +8,7 @@
 #include <SDL_timer.h>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <iostream>
 #include <iterator>
 #include <ostream>
@@ -15,19 +16,11 @@
 #include <memory>
 #include <zip.h>
 
-#ifdef VULPIS_MODULE_NETWORK
-  #include "components/network/http_client.h"
-  #include "components/network/websockets/websockets_client.h"
-#endif
-
-#ifdef VULPIS_MODULE_DATABASE
-  #include "components/database/sqlite_client.h"
-  #include "components/database/kv_cache.h"
-#endif
-
-#ifdef VULPIS_MODULE_AUDIO
-  #include "components/audio/audio.h"
-#endif
+#include "components/network/http_client.h"
+#include "components/network/websockets/websockets_client.h"
+#include "components/database/sqlite_client.h"
+#include "components/database/kv_cache.h"
+#include "components/audio/audio.h"
 
 #include "components/renderer/commands.h"
 #include "components/renderer/opengl_renderer.h"
@@ -58,6 +51,28 @@ int protected_reconcile(lua_State* L) {
 }
 
 int main(int argc, char* argv[]) {
+
+  std::string customRoot = "";
+  std::string customVpak = "";
+
+  for (int i = 1; i < argc; ++i) {
+    std::string arg = argv[i];
+
+    if (arg == "--root-dir" && i + 1 < argc) {
+      customRoot = argv[++i];
+      Vulpis::setRootDirectoryOverride(customRoot);
+    } 
+    else if ((arg == "--assets" || arg == "-a") && i + 1 < argc) {
+      Vulpis::setAssetDirectoryOverride(argv[++i]);
+    }
+
+    else if ((arg == "--vpak" || arg == "-v") && i + 1 < argc) {
+      customVpak = argv[++i];
+      Vulpis::setVpakOverride(customVpak);
+    }
+  }
+
+
   #ifdef __linux__
   SDL_SetHint(SDL_HINT_VIDEODRIVER, "wayland,x11");
   #endif
@@ -88,21 +103,12 @@ int main(int argc, char* argv[]) {
   RegisterGlobalFunctions(L, "vulpis");
   AutoRegisterAllFonts();
 
-#ifdef VULPIS_MODULE_NETWORK
-  HttpClient::Init();
-  WebSocketClient::Init();
-#endif
 
-#ifdef VULPIS_MODULE_DATABASE
-  SqliteClient::Init("vulpis_data.sqlite");
-  KVCache::Init("vulpis_kv_cache");
-#endif
+  std::string basePath = customRoot.empty() ? Vulpis::getProjectRoot() : customRoot;
 
-#ifdef VULPIS_MODULE_AUDIO
-  Audio::Init();
-#endif
-
-  std::string basePath = Vulpis::getProjectRoot();
+  if (!basePath.empty() && basePath.back() != '/' && basePath.back() != '\\') {
+      basePath += "/";
+  }
 
   lua_getglobal(L, "package");
   lua_getfield(L, -1, "path");
@@ -134,11 +140,18 @@ int main(int argc, char* argv[]) {
   fs::path base(basePath);
   fs::path vpakPath;
 
+  if (!customVpak.empty() && fs::exists(customVpak)) {
+    vpakPath = customVpak;
+  }
+
   if (fs::exists(base / "build" / "release" / "app.vpak")) {
     vpakPath = base / "build" / "release" / "app.vpak";
   }
   else if (fs::exists(base / "build" / "debug" / "app.vpak")) {
     vpakPath = base / "build" / "debug" / "app.vpak";
+  }
+  else if (fs::exists(base / "assets" / "packed" / "app.vpak")) {
+    vpakPath = base / "assets" / "packed" / "app.vpak";
   }
   else {
     if (std::getenv("VULPIS_DEV_MODE") == nullptr) {
@@ -193,6 +206,14 @@ int main(int argc, char* argv[]) {
     }
   }
 
+
+    HttpClient::Init();
+    WebSocketClient::Init();
+
+    SqliteClient::Init("vulpis_data.sqlite");
+    KVCache::Init("vulpis_kv_cache");
+
+    Audio::Init();
 
 
   //          ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
@@ -438,14 +459,10 @@ int main(int argc, char* argv[]) {
 
     // 3. PROCESS BACKGROUND QUEUES (Instantly handles the data that woke us up)
 
-#ifdef VULPIS_MODULE_NETWORK
     if (HttpClient::ProcessQueue(L)) { needsRedraw = true; root->makeLayoutDirty(); }
     if (WebSocketClient::ProcessQueue(L)) { needsRedraw = true; root->makeLayoutDirty(); }
-#endif
 
-#ifdef VULPIS_MODULE_DATABASE
     if (SqliteClient::ProcessQueue(L)) { needsRedraw = true; root->makeLayoutDirty(); }
-#endif
 
     if (TextureRegistry::ProcessUploads()) {
       needsRedraw = true;
@@ -594,19 +611,14 @@ int main(int argc, char* argv[]) {
 
   UI_ShutdownFonts();
   TextureRegistry::Cleanup();
-#ifdef VULPIS_MODULE_NETWORK
+
   HttpClient::ShutDown();
   WebSocketClient::ShutDown();
-#endif
 
-#ifdef VULPIS_MODULE_DATABASE
   SqliteClient::ShutDown();
   KVCache::ShutDown();
-#endif
 
-#ifdef VULPIS_MODULE_AUDIO
   Audio::ShutDown();
-#endif
 
   freeTree(L, root);
   SDL_DestroyWindow(window);

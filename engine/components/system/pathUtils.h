@@ -14,5 +14,15 @@ namespace Vulpis {
     fs::path getExecutableDir();
     std::string getProjectRoot();
     std::filesystem::path getCacheDirectory();
+    void setProjectRoot(const std::string& path);
+
+    void setRootDirectoryOverride(const std::filesystem::path& path);
+    void setAssetDirectoryOverride(const std::filesystem::path& path);
+
+    std::filesystem::path resolvePath(const std::filesystem::path& relativePath);
+
+    void setVpakOverride(const std::filesystem::path& path);
+    std::filesystem::path getVpakPath();
 }
+
 

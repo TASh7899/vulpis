@@ -14,7 +14,11 @@
     "lua",
     "yoga",
     "opengl",
-    "libzip"
+    "libzip",
+    "cpr",
+    "ixwebsocket",
+    "leveldb",
+    "sqlite3"
   ],
   "features": {
     "network": {

@@ -19,11 +19,9 @@
 #include <zip.h>
 #include <algorithm>
 
-#ifdef VULPIS_MODULE_NETWORK
 #include <cpr/response.h>
 #include <cpr/ssl_options.h>
 #include <cpr/cpr.h>
-#endif
 
 #include "../../scripting/regsitry.h"
 #include "../../lua.hpp"
@@ -93,7 +91,6 @@ GLuint GetTexture(const std::string &path) {
     }
 
     if (path.find("http://") == 0 || path.find("https://") == 0 ) {
-#ifdef VULPIS_MODULE_NETWORK
       GLuint textureID;
       glGenTextures(1, &textureID);
       glBindTexture(GL_TEXTURE_2D, textureID);
@@ -177,10 +174,8 @@ GLuint GetTexture(const std::string &path) {
       }).detach();
 
       return textureID;
-#else
       std::cerr << "[TextureRegistry] Error: Web textures require VULPIS_MODULE_NETWORK to be enabled." << std::endl;
       return 0;
-#endif
     }
 
 

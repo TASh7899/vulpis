@@ -13,6 +13,12 @@
 #endif
 
 
+namespace {
+    std::filesystem::path s_rootDirOverride;
+    std::filesystem::path s_assetDirOverride;
+    std::filesystem::path s_vpakOverride;
+}
+
 
 namespace Vulpis {
 
@@ -75,13 +81,6 @@ namespace Vulpis {
     return basePath;
   }
 
-  // getAssetPath combines relative path with executable directory to get absolute path
-  std::string getAssetPath(const std::string& relativePath) {
-    std::filesystem::path root(getProjectRoot());
-    return (root / "assets" / relativePath).string();
-  }
-
-
 // ┏╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┓
 // ╏ GET CACHE DIR FOR THE CURRENT OS ╏
 // ┗╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍╍┛
@@ -128,6 +127,83 @@ namespace Vulpis {
         return cacheDir;
   }
 
+
+void setRootDirectoryOverride(const std::filesystem::path& path) {
+      s_rootDirOverride = fs::weakly_canonical(path);
+  }
+
+  void setAssetDirectoryOverride(const std::filesystem::path& path) {
+      s_assetDirOverride = fs::weakly_canonical(path);
+  }
+
+
+  std::filesystem::path resolvePath(const std::filesystem::path& relativePath) {
+    // 1. Check for specific --assets override
+    if (!s_assetDirOverride.empty() && !relativePath.empty() && *relativePath.begin() == "assets") {
+      std::filesystem::path strippedPath;
+      auto it = relativePath.begin();
+      ++it;
+      for (; it != relativePath.end(); ++it) {
+        strippedPath /= *it;
+      }
+
+      std::filesystem::path assetPath = s_assetDirOverride / strippedPath;
+      if (fs::exists(assetPath)) {
+        return fs::weakly_canonical(assetPath);
+      }
+    }
+
+    // 2. Check for global --root-dir override
+    if (!s_rootDirOverride.empty()) {
+      std::filesystem::path rootPath = s_rootDirOverride / relativePath;
+      if (fs::exists(rootPath)) {
+        return fs::weakly_canonical(rootPath);
+      }
+    }
+
+    // 3. Fallback to dynamic executable path discovery
+    fs::path exeDir = getExecutableDir();
+
+    // Look exactly next to the executable
+    fs::path primaryPath = exeDir / relativePath;
+    if (fs::exists(primaryPath)) {
+      return fs::weakly_canonical(primaryPath);
+    }
+
+    // Look one directory up (handles standard /bin/ or /release/ deployment)
+    fs::path parentPath = exeDir.parent_path() / relativePath;
+    if (fs::exists(parentPath)) {
+      return fs::weakly_canonical(parentPath);
+    }
+
+    // Look two directories up (handles nested dev builds like /build/debug/)
+    fs::path grandParentPath = exeDir.parent_path().parent_path() / relativePath;
+    if (fs::exists(grandParentPath)) {
+      return fs::weakly_canonical(grandParentPath);
+    }
+
+    // 4. Final Fallback to current working directory
+    return fs::weakly_canonical(fs::current_path() / relativePath);
+  }
+
+  // Safely update getAssetPath to utilize the new robust resolution
+  std::string getAssetPath(const std::string& relativePath) {
+    fs::path requestedPath = fs::path("assets") / relativePath;
+    return resolvePath(requestedPath).string();
+  }
+
+  void setVpakOverride(const std::filesystem::path& path) {
+    s_vpakOverride = fs::weakly_canonical(path);
+  }
+
+  std::filesystem::path getVpakPath() {
+    // If the user provided a --vpak flag, use it
+    if (!s_vpakOverride.empty() && fs::exists(s_vpakOverride)) {
+      return s_vpakOverride;
+    }
+    // Otherwise, fallback to the default path resolution
+    return resolvePath("build/release/app.vpak");
+  }
 
 }
 
