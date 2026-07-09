@@ -2,23 +2,29 @@
   "name": "vulpis",
   "version-string": "0.1.0",
   "dependencies": [
-{
+    {
       "name": "sdl2",
       "default-features": false,
       "features": [
-        "x11", 
-        "wayland"
+        {
+          "name": "wayland",
+          "platform": "linux"
+        },
+        {
+          "name": "x11",
+          "platform": "!windows"
+        }
       ]
     },
-    "freetype",
-    "lua",
-    "yoga",
-    "opengl",
-    "libzip",
-    "cpr",
-    "ixwebsocket",
-    "leveldb",
-    "sqlite3"
+    { "name": "freetype" },
+    { "name": "lua" },
+    { "name": "yoga" },
+    { "name": "opengl" },
+    { "name": "libzip" },
+    { "name": "cpr" },
+    { "name": "ixwebsocket" },
+    { "name": "leveldb" },
+    { "name": "sqlite3" }
   ],
   "features": {
     "network": {

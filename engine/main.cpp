@@ -164,7 +164,7 @@ int main(int argc, char* argv[]) {
 
   if (!isDevMode && !vpakPath.empty()) {
     int zipErr = 0;
-    zip_t* vpak = zip_open(vpakPath.c_str(), ZIP_RDONLY, &zipErr);
+    zip_t* vpak = zip_open(vpakPath.string().c_str(), ZIP_RDONLY, &zipErr);
 
     if (vpak) {
       std::cout << "--- Mounting VFS: app.vpak ---" << std::endl;

@@ -28,10 +28,10 @@ def get_tool_path(build_dir, tool_name, in_staging=False):
     base_dir = os.path.join(build_dir, "staging") if in_staging else build_dir
 
     possible_paths = [
-            os.path.join(base_dir, exe_name),
-            os.path.join(base_dir, "Release", exe_name),
-            os.path.join(base_dir, "Debug", exe_name)
-            ]
+        os.path.join(base_dir, exe_name),
+        os.path.join(base_dir, "Release", exe_name),
+        os.path.join(base_dir, "Debug", exe_name)
+    ]
     for p in possible_paths:
         if os.path.exists(p):
             return p
@@ -122,6 +122,7 @@ def pack(root_dir, build_dir):
     except subprocess.CalledProcessError as e:
         print(f"--- Packing Failed: {e} ---")
         sys.exit(1)
+
 def pack_scripts(root_dir, build_dir):
     compile_lua(root_dir, build_dir)
 
@@ -135,18 +136,20 @@ def pack_scripts(root_dir, build_dir):
 
     print(f"--- Injecting Lua scripts into {os.path.basename(output_vpak)} ---")
     try:
-        with zipfile.ZipFile(output_vpak, 'r') as zin, zipfile.ZipFile(temp_vpak, 'w', zipfile.ZIP_DEFLATED) as zout:
-            for item in zin.infolist():
-                if not item.filename.startswith("src/"): 
-                    zout.writestr(item, zin.read(item.filename))
+        with zipfile.ZipFile(output_vpak, 'r') as zin:
+            with zipfile.ZipFile(temp_vpak, 'w', zipfile.ZIP_DEFLATED) as zout:
+                for item in zin.infolist():
+                    normalized_name = item.filename.replace("\\", "/")
+                    if not normalized_name.startswith("src/"): 
+                        zout.writestr(item, zin.read(item.filename))
 
-            for root, dirs, files in os.walk(staging_src):
-                for file in files:
-                    if file.endswith(".luac"):
-                        full_path = os.path.join(root, file)
-                        rel_path = os.path.relpath(full_path, staging_src)
-                        internal_path = "src/" + rel_path.replace("\\", "/") 
-                        zout.write(full_path, internal_path)
+                for root, dirs, files in os.walk(staging_src):
+                    for file in files:
+                        if file.endswith(".luac"):
+                            full_path = os.path.join(root, file)
+                            rel_path = os.path.relpath(full_path, staging_src)
+                            internal_path = "src/" + rel_path.replace("\\", "/") 
+                            zout.write(full_path, internal_path)
 
         os.replace(temp_vpak, output_vpak)
         print("--- Fast Script Injection Complete ---")
@@ -163,10 +166,36 @@ def build(root_dir, is_release=False, cmake_flags=None):
     system_os = platform.system()
     machine_arch = platform.machine().lower()
 
+    has_cl = shutil.which("cl") is not None
+    has_clang = shutil.which("clang") is not None and shutil.which("clang++") is not None
+    has_gcc = shutil.which("gcc") is not None and shutil.which("g++") is not None
+
+    vcvars_paths = [
+        r"C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat",
+        r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat",
+        r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
+    ]
+    found_vcvars = next((p for p in vcvars_paths if os.path.exists(p)), None) if system_os == "Windows" else None
+    
+    can_use_msvc = has_cl or found_vcvars is not None
+
     os_prefix = "linux"
+    dynamic_triplet = "x64-linux-dynamic"
+
     if system_os == "Windows":
         os_prefix = "windows"
-        dynamic_triplet = "x64-windows-dynamic"
+        if can_use_msvc:
+            print("--- Detected MSVC Environment ---")
+            dynamic_triplet = "x64-windows"
+        elif has_gcc or has_clang:
+            print("--- Detected MinGW/Clang Environment (No MSVC) ---")
+            dynamic_triplet = "x64-mingw-dynamic"
+            # Force vcpkg host tools to also use mingw to prevent MSVC searches
+            cmake_flags.append(f"-DVCPKG_HOST_TRIPLET={dynamic_triplet}")
+        else:
+            print("Error: No C++ compiler found (MSVC, GCC, or Clang).")
+            print("Please install Visual Studio Build Tools, MSYS2, or LLVM.")
+            sys.exit(1)
     elif system_os == "Darwin":
         if machine_arch in ("arm64", "aarch64"):
             os_prefix = "mac-arm64"
@@ -174,8 +203,6 @@ def build(root_dir, is_release=False, cmake_flags=None):
         else:
             os_prefix = "mac"
             dynamic_triplet = "x64-osx-dynamic"
-    else:
-        dynamic_triplet = "x64-linux-dynamic"
 
     preset_name = f"{os_prefix}-{'release' if is_release else 'default'}"
     build_folder = os.path.join("build", "release" if is_release else "debug")
@@ -183,34 +210,43 @@ def build(root_dir, is_release=False, cmake_flags=None):
 
     cmake_flags.append(f"-DVCPKG_TARGET_TRIPLET={dynamic_triplet}")
     print(f"--- Building Vulpis Project ({'Release' if is_release else 'Debug'}) ---")
+    print(f"--- Target Triplet: {dynamic_triplet} ---")
 
     check_vcpkg(root_dir)
 
-    if system_os == "Windows" and shutil.which("cl") is None:
-        print("--- MSVC Compiler not found. Loading environment... ---")
-        vcvars_paths = [
-                r"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat",
-                r"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat"
-                ]
-        found_vcvars = next((p for p in vcvars_paths if os.path.exists(p)), None)
+    if system_os != "Windows" or not can_use_msvc:
+        if has_gcc:
+            if "-DCMAKE_C_COMPILER=gcc" not in cmake_flags:
+                cmake_flags.extend(["-DCMAKE_C_COMPILER=gcc", "-DCMAKE_CXX_COMPILER=g++"])
+        elif has_clang:
+            if "-DCMAKE_C_COMPILER=clang" not in cmake_flags:
+                cmake_flags.extend(["-DCMAKE_C_COMPILER=clang", "-DCMAKE_CXX_COMPILER=clang++"])
 
-        if found_vcvars:
-            flags_str = " ".join(cmake_flags)
-            cmd = f'"{found_vcvars}" x64 && cmake --preset {preset_name} {flags_str} && cmake --build {build_folder}'
-            subprocess.run(cmd, shell=True, cwd=root_dir, check=True)
-            return 
-        sys.exit(1)
+    vcpkg_toolchain = os.path.join(root_dir, "third_party", "vcpkg", "scripts", "buildsystems", "vcpkg.cmake")
+    if os.path.exists(vcpkg_toolchain):
+        cmake_flags.append(f"-DCMAKE_TOOLCHAIN_FILE={vcpkg_toolchain}")    
+        ninja_path = shutil.which("ninja")
+
+    if ninja_path and "-G" not in " ".join(cmake_flags):
+        cmake_flags.extend(["-G", "Ninja"])
+        cmake_flags.append(f"-DCMAKE_MAKE_PROGRAM={ninja_path}")
+    elif system_os == "Windows" and not can_use_msvc and not ninja_path:
+        if "-G" not in " ".join(cmake_flags):
+            cmake_flags.extend(["-G", "MinGW Makefiles"])
 
     if not os.path.exists(build_dir):
         os.makedirs(build_dir)
 
     try:
-        if shutil.which("ninja") and "-G" not in " ".join(cmake_flags):
-            cmake_flags.extend(["-G", "Ninja"])
-
-        config_cmd = ["cmake", "--preset", preset_name] + cmake_flags
-        subprocess.run(config_cmd, cwd=root_dir, check=True)
-        subprocess.run(["cmake", "--build", build_folder], cwd=root_dir, check=True)
+        if system_os == "Windows" and can_use_msvc and not has_cl and found_vcvars:
+            print("--- MSVC Compiler not loaded in active terminal. Wrapping build command... ---")
+            flags_str = " ".join(cmake_flags)
+            cmd = f'"{found_vcvars}" x64 && cmake --preset {preset_name} {flags_str} && cmake --build {build_folder}'
+            subprocess.run(cmd, shell=True, cwd=root_dir, check=True)
+        else:
+            config_cmd = ["cmake", "--preset", preset_name] + cmake_flags
+            subprocess.run(config_cmd, cwd=root_dir, check=True)
+            subprocess.run(["cmake", "--build", build_folder], cwd=root_dir, check=True)
 
         compile_db = os.path.join(root_dir, build_folder, "compile_commands.json")
         if os.path.exists(compile_db):
@@ -221,11 +257,14 @@ def build(root_dir, is_release=False, cmake_flags=None):
             if exe_path and system_os != "Windows":
                 try:
                     subprocess.run(["strip", exe_path], check=True)
-                except Exception: pass
+                except Exception: 
+                    pass
             print(f"--- Release Build Complete: {exe_path} ---")
+
     except subprocess.CalledProcessError:
         print("--- Build Failed ---")
         sys.exit(1)
+
 
 def run(root_dir, is_release=False):
     build_folder = os.path.join("build", "release" if is_release else "debug")
@@ -267,24 +306,25 @@ def check_vcpkg(root_dir):
     if not os.path.exists(vcpkg_exe):
         print("--- Bootstrapping vcpkg (First run only) ---")
         if is_windows:
-            subprocess.run([bootstrap_script], cwd=vcpkg_dir, shell=True, check=True)
+            subprocess.run(bootstrap_script, cwd=vcpkg_dir, shell=True, check=True)
         else:
             os.chmod(bootstrap_path, 0o755)
             subprocess.run([bootstrap_path], cwd=vcpkg_dir, shell=False, check=True)
 
 def analyze_lua_dependencies(root_dir):
     modules = {
-            "NETWORK": "OFF",
-            "DATABASE": "OFF",
-            "AUDIO": "OFF"
-            }
+        "NETWORK": "OFF",
+        "DATABASE": "OFF",
+        "AUDIO": "OFF"
+    }
     app_lua_path = os.path.join(root_dir, "src", "app.lua")
     if os.path.exists(app_lua_path):
         try:
             with open(app_lua_path, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if line and not line.startswith("--"): break
+                    if line and not line.startswith("--"): 
+                        break
                     if line.startswith("-- @vulpis-modules:"):
                         flags_str = line.split(":", 1)[1]
                         flags = [f.strip().upper() for f in flags_str.split(",")]
@@ -292,13 +332,14 @@ def analyze_lua_dependencies(root_dir):
                         if "DATABASE" in flags: modules["DATABASE"] = "ON"
                         if "AUDIO" in flags: modules["AUDIO"] = "ON"
                         break 
-        except Exception: pass
+        except Exception: 
+            pass
 
     cmake_args = [
-            f"-DVULPIS_MODULE_NETWORK={modules['NETWORK']}",
-            f"-DVULPIS_MODULE_DATABASE={modules['DATABASE']}",
-            f"-DVULPIS_MODULE_AUDIO={modules['AUDIO']}"
-            ]
+        f"-DVULPIS_MODULE_NETWORK={modules['NETWORK']}",
+        f"-DVULPIS_MODULE_DATABASE={modules['DATABASE']}",
+        f"-DVULPIS_MODULE_AUDIO={modules['AUDIO']}"
+    ]
 
     vcpkg_features = []
     if modules["NETWORK"] == "ON": vcpkg_features.append("network")
@@ -310,7 +351,6 @@ def analyze_lua_dependencies(root_dir):
         cmake_args.append("-DVCPKG_MANIFEST_FEATURES=")
 
     return cmake_args
-
 
 def get_or_create_manifest(root_dir):
     """Ensures a manifest exists, creating a default one if missing."""
@@ -327,9 +367,6 @@ def get_or_create_manifest(root_dir):
     
     with open(manifest_path, 'r') as f:
         return json.load(f)
-
-
-
 
 def generate_app_installer(root_dir):
     """
@@ -380,7 +417,6 @@ if [ -z "$RUNTIME_BIN" ]; then
 fi
 
 echo "Verifying API compatibility..."
-# Safely extract the API integer from the runtime's JSON output
 SYSTEM_API=$("$RUNTIME_BIN" --runtime-info | python3 -c "import sys, json; print(json.load(sys.stdin).get('api', 0))")
 
 if [ "$SYSTEM_API" -lt "$REQUIRED_API" ]; then
@@ -468,7 +504,6 @@ Write-Host "Installation Complete! $AppName is available in your Start Menu." -F
 REQUIRED_API={required_api}
 VPAK_PATH="$(dirname "$0")/../Resources/app.vpak"
 
-# macOS GUI apps don't inherently inherit the user's shell PATH, so we define the standard locations
 export PATH="/usr/local/bin:/opt/vulpis/bin:$PATH"
 RUNTIME_BIN=$(command -v vulpis-runtime || true)
 
@@ -517,10 +552,6 @@ exec "$RUNTIME_BIN" --mount "$VPAK_PATH"
         print(f"Installer generation not supported for OS: {system_os}")
         
     print("--- Installer Pipeline Complete ---")
-
-
-
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Vulcli - Command-line build tool for the Vulpis Engine")
@@ -586,5 +617,3 @@ if __name__ == "__main__":
 
     elif args.cmd == "installer":
         generate_app_installer(project_root)
-
-

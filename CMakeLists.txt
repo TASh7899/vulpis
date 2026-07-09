@@ -1,16 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
 
-set(VCPKG_ROOT "${CMAKE_SOURCE_DIR}/third_party/vcpkg")
-if(EXISTS "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
-  set(CMAKE_TOOLCHAIN_FILE "${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
-else()
-  if(DEFINED ENV{VCPKG_ROOT})
-    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "Vcpkg toolchain file")
-  else()
-    message(WARNING "Vcpkg not found in third_party/vcpkg or ENV{VCPKG_ROOT}. Dependency installation may fail.")
-  endif()
-endif()
-
 project(vulpis LANGUAGES CXX C)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" OR NOT CMAKE_BUILD_TYPE)
@@ -92,6 +81,7 @@ set(VULPIS_LIBS
   unofficial::sqlite3::sqlite3
 )
 
+# Clean, single OS block (without bcrypt)
 if (APPLE)
   list(APPEND VULPIS_LIBS "-framework CoreAudio" "-framework AudioToolbox")
 elseif (UNIX AND NOT APPLE)
@@ -100,6 +90,10 @@ endif()
 
 add_executable(vulpis ${VULPIS_SOURCES})
 target_link_libraries(vulpis PRIVATE ${VULPIS_LIBS})
+
+if (WIN32)
+    set(CMAKE_CXX_STANDARD_LIBRARIES "${CMAKE_CXX_STANDARD_LIBRARIES} -lbcrypt")
+endif()
 
 target_include_directories(vulpis PRIVATE
   third_party/glad/include
